@@ -4,7 +4,6 @@ const BOOK_MAP = {
 
 let bibleData = [];
 
-// 網頁開啟時下載資料
 window.onload = function() {
     fetch('./chinesetrad.json')
         .then(res => {
@@ -21,7 +20,6 @@ window.onload = function() {
         });
 };
 
-// 模式切換邏輯
 function switchMode(mode) {
     document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
     document.querySelectorAll('.search-panel').forEach(panel => panel.classList.remove('active'));
@@ -35,7 +33,6 @@ function switchMode(mode) {
     }
 }
 
-// 清理 Strong's 編號
 function cleanStrongs(text) {
     if (!text) return "";
     let t = String(text);
@@ -44,7 +41,6 @@ function cleanStrongs(text) {
     return t.trim();
 }
 
-// 尋找 Strong's 編號
 function findAllStrongs(rawText, keyword) {
     const escaped = keyword.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
     const pattern = new RegExp(escaped + "((?:[<{][GH]\\d+[a-zA-Z]?[>}])+)", "g");
@@ -80,6 +76,53 @@ function escapeHtml(string) {
     });
 }
 
+/**
+ * 💡 新增功能：從公開的精簡版 Strong's 字典 API 異步獲取原文和英文定義
+ * 支援舊約希伯來文 (H) 與新約希臘文 (G)
+ */
+function fetchStrongsDefinition(strongId) {
+    const isHebrew = strongId.startsWith('H');
+    // 去除編號前綴字母，補足為四位數（例如 H2655 -> 2655，符合開源字典 API 的路徑規範）
+    const num = strongId.substring(1).padStart(4, '0');
+    const testament = isHebrew ? 'hebrew' : 'greek';
+    
+    // 使用開源的 BDB (希伯來) / Thayer (希臘) 字典庫路徑
+    const url = `https://raw.githubusercontent.com/skorespace/OpenGNT/master/data/strongs/${testament}/${num}.json`;
+
+    fetch(url)
+        .then(res => {
+            if (!res.ok) throw new Error();
+            return res.json();
+        })
+        .then(data => {
+            // 根據開源聖經 JSON 結構抓取字根與英文釋義
+            const lemma = data.lemma || data.word || "未知字根";
+            const definition = data.derivation || data.definition || data.strongs_def || "暫無英文釋義";
+            
+            // 動態更新網頁上對應 ID 的元素內容
+            const infoElem = document.getElementById(`info-${strongId}`);
+            if (infoElem) {
+                infoElem.innerHTML = ` ── <span class="original-word">${lemma}</span> <span class="english-def">(${definition})</span>`;
+            }
+        })
+        .catch(() => {
+            // 如果開源庫沒抓到，嘗試備用開源地址
+            const fallbackUrl = `https://openbibleinfo.github.io/strongs/${testament}/${parseInt(num, 10)}.json`;
+            fetch(fallbackUrl)
+                .then(res => res.json())
+                .then(data => {
+                    const infoElem = document.getElementById(`info-${strongId}`);
+                    if (infoElem) {
+                        infoElem.innerHTML = ` ── <span class="original-word">${data.transliteration || ''}</span> <span class="english-def">(${data.definition || 'No definition found'})</span>`;
+                    }
+                })
+                .catch(() => {
+                    const infoElem = document.getElementById(`info-${strongId}`);
+                    if (infoElem) infoElem.innerHTML = " ── <span style='color:#999; font-weight:normal; font-size:12px;'>（未尋得雲端原文定義）</span>";
+                });
+        });
+}
+
 function buildSectionsHtml(groups, keyword) {
     let html = "";
     const sortedKeys = Object.keys(groups).sort(sortStrongIds);
@@ -93,9 +136,10 @@ function buildSectionsHtml(groups, keyword) {
             return parseInt(a.verse) - parseInt(b.verse);
         });
 
+        // 💡 修改點：在 title 裡預留一個 span 容器 (id="info-H2655")，稍後透過 API 把查詢到的原文與英文塞進去
         html += `
             <div class='group-title'> 
-                <span>原文編號: <strong>${strongId}</strong></span>
+                <span>原文編號: <strong>${strongId}</strong><span id="info-${strongId}"><span class="loading-text"> ── 正在查詢雲端字根...</span></span></span>
                 <span class="summary-badge">共 ${verses.length} 節</span>
             </div>
             <table>
@@ -120,22 +164,19 @@ function buildSectionsHtml(groups, keyword) {
         });
 
         html += `</tbody></table><hr class='group-divider'>`;
+
+        // 💡 渲染完 HTML 骨架後，立刻呼叫非同步函式去網路上抓這個編號的定義
+        setTimeout(() => { fetchStrongsDefinition(strongId); }, 50);
     });
     return html;
 }
 
-/* =========================================================
-   模式一：關鍵字查詢 (已預留未來「簡繁轉換」的擴充點)
-   ========================================================= */
 function runSearch() {
     let keyword = document.getElementById('keyword').value.trim();
     if (!keyword) return;
     if (bibleData.length === 0) { alert("資料庫尚未加載完成。"); return; }
 
     document.getElementById('status').innerText = "搜尋中...";
-
-    // 💡 【未來擴充點】在這裡加入簡繁體字典轉換
-    // 範例：if (isSimplified(keyword)) keyword = convertToTraditional(keyword);
     
     let otGroups = {};
     let ntGroups = {};
@@ -144,8 +185,6 @@ function runSearch() {
 
     bibleData.forEach(entry => {
         const rawText = entry.text || "";
-        
-        // 💡 如果未來做了轉換，這裡的 includes 就能順利比對繁體資料庫
         if (!rawText.includes(keyword)) return;
 
         const bookId = parseInt(entry.book, 10);
@@ -185,9 +224,6 @@ function runSearch() {
     document.getElementById('status').innerText = "搜尋完畢！";
 }
 
-/* =========================================================
-   模式二：原文反查模式 (目前先做基礎偵測提示，供你未來擴充)
-   ========================================================= */
 function runReverseSearch() {
     const rawInputText = document.getElementById('reverse-text').value.trim();
     const targetWord = document.getElementById('reverse-target').value.trim();
@@ -196,12 +232,6 @@ function runReverseSearch() {
         alert("請輸入參考經文與要反查的特定中文字！");
         return;
     }
-
-    alert(`【功能開發中】\n你希望在輸入的內文中，找出「${targetWord}」對應的希臘文或希伯來文編號。\n目前架構已就緒，下一步我們可以匯入編號字典檔來進行精準比對。`);
-    
-    // 💡 【未來擴充邏輯】
-    // 1. 解析 rawInputText，將其與 bibleData 的章節內容進行模糊比對，找出它是哪一卷哪一章哪一節。
-    // 2. 找到對應的經文原始資料（帶有 Strong's 編號的 rawText）。
-    // 3. 用正則表達式撈出 targetWord 後面接著的 [Gxxxx] 或 [Hxxxx]。
-    // 4. 將結果彈出或呈現在結果區！
+    alert(`【功能開發中】\n你希望在輸入的內文中，找出「${targetWord}」對應的希臘文或希伯來文編號。`);
 }
+
