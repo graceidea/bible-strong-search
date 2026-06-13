@@ -106,12 +106,13 @@ button:hover {
 .group-title { 
     background: #f5f5f5; 
     border-left: 5px solid #8e44ad; 
-    padding: 10px; 
+    padding: 12px; 
     margin-top: 25px; 
     font-weight: bold; 
     display: flex; 
     justify-content: space-between; 
-    align-items: center; 
+    align-items: flex-start; /* 改為靠上對齊，因為英文解釋如果太長可以自然向下排 */
+    flex-wrap: wrap; /* 支援手機板自動換行 */
 }
 table { 
     width: 100%; 
@@ -172,14 +173,20 @@ th {
     border: 1px solid #e0e0e0;
 }
 
+
+
 .english-def {
     font-size: 14px;
-    color: #555;
+    color: #444;
     font-weight: normal;
-    font-family: Arial, sans-serif;
+    font-family: Arial, "Segoe UI", sans-serif;
     margin-left: 8px;
     background: #fffdf3;
-    padding: 2px 6px;
+    padding: 4px 8px;
     border-radius: 4px;
     border: 1px dashed #f39c12;
+    display: inline-block;
+    max-width: 100%; /* 避免超出視窗 */
+    line-height: 1.4;
+    vertical-align: middle;
 }
