@@ -152,3 +152,34 @@ th {
     button { width: 100%; }
     th, td { padding: 6px; font-size: 14px; }
 }
+
+/* 新增：雲端原文編號釋義的視覺美化 */
+.loading-text {
+    font-size: 13px;
+    color: #b3a2be;
+    font-weight: normal;
+    font-style: italic;
+}
+
+.original-word {
+    font-family: "Times New Roman", "SBL Hebrew", "SBL Greek", serif;
+    font-size: 20px; /* 原文字體稍微放大更清晰 */
+    color: #2c3e50;
+    background-color: #fff;
+    padding: 2px 6px;
+    border-radius: 4px;
+    margin-left: 5px;
+    border: 1px solid #e0e0e0;
+}
+
+.english-def {
+    font-size: 14px;
+    color: #555;
+    font-weight: normal;
+    font-family: Arial, sans-serif;
+    margin-left: 8px;
+    background: #fffdf3;
+    padding: 2px 6px;
+    border-radius: 4px;
+    border: 1px dashed #f39c12;
+}
