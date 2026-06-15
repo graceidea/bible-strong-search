@@ -124,17 +124,23 @@ function buildSectionsHtml(groups, keyword) {
         // 💡 這裡直接呼叫剛才寫好的 getLocalStrongsDefinitionHtml 函式，秒速生成內容
         const definitionHtml = getLocalStrongsDefinitionHtml(strongId);
 
+        // ✨ 新增判斷：如果 strongId 是以 'G' 或 'g' 開頭（新約希臘文），就定義 class 為 'nt-group'，否則為空字串（舊約紫色）
+        const isNewTestament = strongId.trim().toUpperCase().startsWith('G');
+        const ntClass = isNewTestament ? 'nt-group' : '';
+
+        // 這裡修改了第一行，將 ${ntClass} 動態注入到 class 屬性中
         html += `
-            <div class='group-title'> 
-                <span>原文編號: <strong>${strongId}</strong>${definitionHtml}</span>
-                <span class="summary-badge">共 ${verses.length} 節</span>
-            </div>
-            <table>
-                <thead>
-                    <tr><th style='width:25%'>書卷</th><th style='width:20%'>章節</th><th>經文內容</th></tr>
-                </thead>
-                <tbody>
-        `;
+          <div class='group-title ${ntClass}'>
+            <span>原文編號: <strong>${strongId}</strong>${definitionHtml}</span>
+            <span class="summary-badge">共 ${verses.length} 節</span>
+          </div>
+          <table>
+            <thead>
+              <tr><th style='width:25%'>書卷</th><th style='width:20%'>章節</th><th>經文內容</th></tr>
+            </thead>
+            <tbody>
+`        ;
+        
 
         verses.forEach(v => {
             const safeText = escapeHtml(v.text);
