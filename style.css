@@ -134,7 +134,10 @@ button:hover {
     align-items: flex-start; 
     flex-wrap: wrap; 
 }
-
+/* ✨ 新增：當 class 包含 nt-group 時，將左側粗線強制換成與新約標題匹配的藍色 */
+.group-title.nt-group {
+    border-left: 5px solid #2980b9 !important; /* 這個藍色（#2980b9）與你新約大標題的藍色高度契合 */
+}
 /* ==========================================
    5. 表格核心優化（精確控制欄寬、消除間隙、極致緊湊）
    ========================================== */
