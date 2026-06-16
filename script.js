@@ -286,8 +286,10 @@ function runSearch() {
     const ntHtml = Object.keys(ntGroups).length ? buildSectionsHtml(ntGroups, simpKeyword) : "<p class='no-result'>無結果</p>"; 
 
     // 雙向強制高亮修正
-    document.getElementById('ot-results').innerHTML = htmlFontFix(otHtml, tradKeyword, simpKeyword);
-    document.getElementById('nt-results').innerHTML = htmlFontFix(ntHtml, tradKeyword, simpKeyword);
+    //  直接寫入即可，不需要再經過 htmlFontFix 污染字體顏色
+    document.getElementById('ot-results').innerHTML = otHtml;
+    document.getElementById('nt-results').innerHTML = ntHtml;
+
     document.getElementById('results-area').style.display = 'block'; 
     document.getElementById('status').innerText = "搜尋完畢！"; 
 }
