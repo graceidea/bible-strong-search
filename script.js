@@ -305,20 +305,26 @@ function runSearch() {
     let rawKeyword = document.getElementById('keyword').value.trim(); 
     if (!rawKeyword) return; 
 
-    let keyword = rawKeyword;
-
-    // 💡 修正：适配 s2t-t2s 库的全局变量名和方法
-    if (typeof s2t_t2s === 'object' && typeof s2t_t2s.s2t === 'function') {
-        keyword = s2t_t2s.s2t(keyword); 
-        console.log(`[简繁转换] ${rawKeyword} -> ${keyword}`);
-    } else {
-        console.error("【错误】未能加载简繁转换库 s2t_t2s。");
-    }
-
-    if (bibleData.length === 0) {
+    if (bibleData.length === 0 || bibleSimpData.length === 0) {
         alert("資料庫尚未加載完成。"); 
         return; 
     } 
+
+    // 💡 步驟 1：偵測使用者輸入的是「繁體」還是「簡體」
+    let isSimplified = false;
+    if (typeof s2t_t2s === 'object' && typeof s2t_t2s.s2t === 'function') {
+        // 如果原本輸入的字，跟轉成繁體後的字「不一樣」，代表使用者輸入的是簡體字！
+        if (s2t_t2s.s2t(rawKeyword) !== rawKeyword) {
+            isSimplified = true;
+        }
+    }
+
+    // 💡 步驟 2：核心切換！根據字體，動態決定要調用哪一個字庫
+    // 如果是簡體字，就調用 bibleSimpData；如果是繁體字，就調用原來的 bibleData
+    const currentBibleDatabase = isSimplified ? bibleSimpData : bibleData;
+    const keyword = rawKeyword; // 直接拿使用者輸入的原始字去查，不需要強行轉換
+
+    console.log(`[字庫調用] 偵測到${isSimplified ? '簡體' : '繁體'}輸入。正在檢索 ${isSimplified ? 'chinesesimp.json' : 'chinesetrad.json'}`);
 
     document.getElementById('status').innerText = "搜尋中..."; 
     let otGroups = {}; 
@@ -326,7 +332,8 @@ function runSearch() {
     let otTotalVerses = 0; 
     let ntTotalVerses = 0; 
 
-    bibleData.forEach(entry => { 
+    // 💡 步驟 3：現在這裡會根據使用者輸入，動態調用正確的字庫進行迴圈了！
+    currentBibleDatabase.forEach(entry => { 
         const rawText = entry.text || ""; 
         if (!rawText.includes(keyword)) return; 
 
@@ -366,11 +373,11 @@ function runSearch() {
     document.getElementById('results-area').style.display = 'block'; 
     document.getElementById('status').innerText = "搜尋完畢！"; 
 
-    // 📊 GA4 統計：建议上报用户手打输入的 rawKeyword，更贴合用户真实行为分析
+    // 📊 GA4 統計
     if (typeof gtag === 'function') { 
         gtag('event', 'bible_search', { 
             'search_term': rawKeyword, 
-            'converted_term': keyword,
+            'database_used': isSimplified ? 'simplified' : 'traditional',
             'total_results': otTotalVerses + ntTotalVerses 
         }); 
     } 
