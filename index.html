@@ -1,3 +1,6 @@
+
+
+
 <!DOCTYPE html>
 <html lang="zh-TW">
 <head>
@@ -18,6 +21,12 @@
 
         <div id="panel-keyword" class="search-panel active">
             <input type="text" id="keyword" placeholder="請輸入中文關鍵字（支援簡繁自動轉換，如：光、忍耐）" onkeyup="if(event.key==='Enter') runSearch()">
+            
+            <!-- 💡 【新增】書卷過濾下拉選單（JavaScript 會在 window.onload 時自動把 66 卷書塞進這裡） -->
+            <select id="book-filter" style="padding: 10px; font-size: 16px; border: 1px solid #ccc; border-radius: 4px; outline: none; background: #fff; cursor: pointer;">
+                <option value="all">🔍 所有書卷（全部）</option>
+            </select>
+
             <button onclick="runSearch()">搜尋</button>
         </div>
 
