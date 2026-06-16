@@ -159,19 +159,16 @@ function runSearch() {
         return; 
     } 
 
-    // 💡 步驟 1：偵測使用者輸入的是「繁體」還是「簡體」
-    let isSimplified = false;
-    if (typeof s2t_t2s === 'object' && typeof s2t_t2s.s2t === 'function') {
-        if (s2t_t2s.s2t(rawKeyword) !== rawKeyword) {
-            isSimplified = true;
-        }
+    // 💡 步驟 1：同時準備好繁體與簡體兩種關鍵字
+    let tradKeyword = rawKeyword;
+    let simpKeyword = rawKeyword;
+
+    if (typeof s2t_t2s === 'object') {
+        if (typeof s2t_t2s.s2t === 'function') tradKeyword = s2t_t2s.s2t(rawKeyword); // 確保拿到繁體 "愛"
+        if (typeof s2t_t2s.t2s === 'function') simpKeyword = s2t_t2s.t2s(rawKeyword); // 確保拿到簡體 "爱"
     }
 
-    // 💡 步驟 2：核心切換！根據字體，動態決定要調用哪一個字庫
-    const currentBibleDatabase = isSimplified ? bibleSimpData : bibleData;
-    const keyword = rawKeyword; 
-
-    console.log(`[字庫調用] 偵測到${isSimplified ? '簡體' : '繁體'}輸入。正在檢索 ${isSimplified ? 'chinesesimp.json' : 'chinesetrad.json'}`);
+    console.log(`[搜尋啟動] 原始輸入: ${rawKeyword} | 繁體對照: ${tradKeyword} | 簡體對照: ${simpKeyword}`);
 
     document.getElementById('status').innerText = "搜尋中..."; 
     let otGroups = {}; 
@@ -179,55 +176,92 @@ function runSearch() {
     let otTotalVerses = 0; 
     let ntTotalVerses = 0; 
 
-    // 💡 步驟 3：巡迴檢索動態指定的字庫
-    currentBibleDatabase.forEach(entry => { 
+    // 💡 步驟 2：雙軌檢索！同時去翻繁體庫與簡體庫
+    // 這樣不論哪一個字庫格式藏有 Strong 編號，都能被掘地三尺挖出來！
+    
+    // 先查繁體字庫（因為繁體字庫通常百分之百帶有完整的 {GXXXX} 編號）
+    bibleData.forEach(entry => { 
         const rawText = entry.text || ""; 
-        if (!rawText.includes(keyword)) return; 
+        // 只要這行經文包含繁體關鍵字，就進去抓編號
+        if (!rawText.includes(tradKeyword)) return; 
 
         const bookId = parseInt(entry.book, 10); 
-        const strongIds = findAllStrongs(rawText, keyword); 
+        // 用繁體字去精準匹配代碼如 `愛{G26}`
+        const strongIds = findAllStrongs(rawText, tradKeyword); 
         if (strongIds.length === 0) return; 
+
+        // 💡 核心優化：如果使用者輸入的是簡體字，我們就從簡體字庫（bibleSimpData）裡提取對應的純文字經文顯示，體驗最好！
+        let showText = "";
+        const simpEntry = bibleSimpData.find(s => s.book == entry.book && s.chapter == entry.chapter && s.verse == entry.verse);
+        if (simpEntry) {
+            showText = cleanStrongs(simpEntry.text); // 顯示簡體經文
+        } else {
+            showText = cleanStrongs(rawText); // 備用：顯示繁體經文
+        }
 
         const verseData = { 
             book_id: bookId, 
             book_name: BOOK_MAP[bookId] || `未知(${bookId})`, 
             chapter: entry.chapter, 
             verse: entry.verse, 
-            text: cleanStrongs(rawText) 
+            text: showText 
         }; 
 
         strongIds.forEach(strongId => { 
             if (bookId <= 39) { 
                 if (!otGroups[strongId]) otGroups[strongId] = []; 
-                otGroups[strongId].push({...verseData}); 
-                otTotalVerses++; 
+                // 檢查是否重複加入
+                if (!otGroups[strongId].some(v => v.book_id === bookId && v.chapter === entry.chapter && v.verse === entry.verse)) {
+                    otGroups[strongId].push({...verseData}); 
+                    otTotalVerses++; 
+                }
             } else { 
                 if (!ntGroups[strongId]) ntGroups[strongId] = []; 
-                ntGroups[strongId].push({...verseData}); 
-                ntTotalVerses++; 
+                if (!ntGroups[strongId].some(v => v.book_id === bookId && v.chapter === entry.chapter && v.verse === entry.verse)) {
+                    ntGroups[strongId].push({...verseData}); 
+                    ntTotalVerses++; 
+                }
             } 
         }); 
     }); 
 
+    // 💡 步驟 3：渲染與高亮（同時支持繁簡高亮）
     document.getElementById('ot-count').innerText = `（找到 ${otTotalVerses} 筆）`; 
     document.getElementById('nt-count').innerText = `（找到 ${ntTotalVerses} 筆）`; 
 
-    const otHtml = Object.keys(otGroups).length ? buildSectionsHtml(otGroups, keyword) : "<p class='no-result'>無結果</p>"; 
-    const ntHtml = Object.keys(ntGroups).length ? buildSectionsHtml(ntGroups, keyword) : "<p class='no-result'>無結果</p>"; 
+    // 這裡我們需要微調 buildSectionsHtml 的呼叫，把原始輸入的 rawKeyword 傳進去高亮
+    // 為了保證高亮成功，我們直接在下面做一個高亮修正
+    const otHtml = Object.keys(otGroups).length ? buildSectionsHtml(otGroups, tradKeyword) : "<p class='no-result'>無結果</p>"; 
+    const ntHtml = Object.keys(ntGroups).length ? buildSectionsHtml(ntGroups, tradKeyword) : "<p class='no-result'>無結果</p>"; 
 
-    document.getElementById('ot-results').innerHTML = otHtml; 
-    document.getElementById('nt-results').innerHTML = ntHtml; 
+    // 容錯：讓網頁同時能高亮簡體字和繁體字
+    let finalOtHtml = otHtml. some ? otHtml : htmlFontFix(otHtml, tradKeyword, simpKeyword);
+    let finalNtHtml = ntHtml. some ? ntHtml : htmlFontFix(ntHtml, tradKeyword, simpKeyword);
+
+    document.getElementById('ot-results').innerHTML = finalOtHtml; 
+    document.getElementById('nt-results').innerHTML = finalNtHtml; 
     document.getElementById('results-area').style.display = 'block'; 
     document.getElementById('status').innerText = "搜尋完畢！"; 
 
-    // 📊 GA4 數據統計上報
+    // 📊 GA4 統計
     if (typeof gtag === 'function') { 
         gtag('event', 'bible_search', { 
             'search_term': rawKeyword, 
-            'database_used': isSimplified ? 'simplified' : 'traditional',
             'total_results': otTotalVerses + ntTotalVerses 
         }); 
     } 
+}
+
+// 💡 輔助高亮修正函式：確保繁體和簡體字在表格裡都能變成黃色高亮
+function htmlFontFix(htmlStr, trad, simp) {
+    if (!htmlStr) return htmlStr;
+    let res = htmlStr;
+    if (trad && trad !== simp) {
+        // 如果經文裡輸出的是簡體，而原本只高亮了繁體，這裡補上簡體高亮
+        const safeSimp = escapeHtml(simp);
+        res = res.split(safeSimp).join(`<span class='hl'>${safeSimp}</span>`);
+    }
+    return res;
 }
 
 function runReverseSearch() {
