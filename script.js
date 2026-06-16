@@ -232,6 +232,9 @@ function runSearch() {
         return; 
     } 
 
+    // 💡 【核心新增】獲取選單目前選擇的篩選條件
+    const selectedBookFilter = document.getElementById('book-filter') ? document.getElementById('book-filter').value : 'all';
+
     // 💡 步驟 1：同時準備好繁體與簡體關鍵字
     let tradKeyword = rawKeyword;
     let simpKeyword = rawKeyword;
@@ -255,23 +258,42 @@ function runSearch() {
     let otTotalVerses = 0; 
     let ntTotalVerses = 0; 
 
-    // 💡 步驟 2：核心搜尋邏輯（解決字與字之間夾帶編號的問題）
+    // 💡 步驟 2：核心搜尋與範圍過濾邏輯
     currentBibleDatabase.forEach(entry => { 
+        const bookId = parseInt(entry.book, 10); 
+
+        // ⭐ 【全新篩選器攔截】
+        if (selectedBookFilter !== 'all') {
+            // 1. 如果選了「舊約全部」，跳過新約經文
+            if (selectedBookFilter === 'ot_all' && bookId > 39) {
+                return;
+            }
+            // 2. 如果選了「新約全部」，跳過舊約經文
+            if (selectedBookFilter === 'nt_all' && bookId <= 39) {
+                return;
+            }
+            // 3. 如果選了「單一特定書卷」，編號對不上就跳過
+            if (selectedBookFilter !== 'ot_all' && selectedBookFilter !== 'nt_all' && bookId !== parseInt(selectedBookFilter, 10)) {
+                return;
+            }
+        }
+
         const rawText = entry.text || ""; 
         
-        // ⭐ 【降維打擊】先把經文裡的 {H1234} 全部拔掉，變成純中文字串！
-        // 這樣 "喜{H8057}乐{H8056}" 就會變成乾乾淨淨的 "喜乐"
+        // 【降維打擊】先把經文裡的 {H1234} 全部拔掉，變成純中文字串！
         const cleanText = cleanStrongs(rawText); 
         
         // 用純中文字去比對，不管是簡體還是繁體，只要中了就符合！
-        if (!cleanText.includes(simpKeyword) && !cleanText.includes(tradKeyword)) {
-            return; 
+        let matchedKeyword = "";
+        if (cleanText.includes(simpKeyword)) {
+            matchedKeyword = simpKeyword;
+        } else if (cleanText.includes(tradKeyword)) {
+            matchedKeyword = tradKeyword;
+        } else {
+            return; // 都不包含就跳過
         }
 
-        const bookId = parseInt(entry.book, 10); 
-        
-        // ⭐ 【精準抓取】既然純文字中了，我們直接從「整行」rawText 裡把所有原文編號打包撈出來
-        // 這樣就不怕關鍵字字體不對或者被編號切斷的問題了！
+        // 【精準抓取】既然純文字中了，我們直接從「整行」rawText 裡把所有原文編號打包撈出來
         let strongIds = [];
         const fallbackPattern = /[GH]\d+[a-zA-Z]?/g;
         const allMatches = rawText.match(fallbackPattern);
@@ -305,18 +327,21 @@ function runSearch() {
     document.getElementById('ot-count').innerText = `（找到 ${otTotalVerses} 筆）`; 
     document.getElementById('nt-count').innerText = `（找到 ${ntTotalVerses} 筆）`; 
 
-    // 💡 步驟 3：高亮與渲染
-    const otHtml = Object.keys(otGroups).length ? buildSectionsHtml(otGroups, simpKeyword) : "<p class='no-result'>無結果</p>"; 
-    const ntHtml = Object.keys(ntGroups).length ? buildSectionsHtml(ntGroups, simpKeyword) : "<p class='no-result'>無結果</p>"; 
+    // 💡 步驟 3：智慧判斷傳入高亮的關鍵字字體
+    // 依據目前使用的字庫，傳入相對應的繁體或簡體關鍵字給 buildSectionsHtml，確保能精準染紅
+    const renderKeyword = isSimplified ? simpKeyword : tradKeyword;
 
-    // 雙向強制高亮修正
-    //  直接寫入即可，不需要再經過 htmlFontFix 污染字體顏色
+    const otHtml = Object.keys(otGroups).length ? buildSectionsHtml(otGroups, renderKeyword) : "<p class='no-result'>無結果</p>"; 
+    const ntHtml = Object.keys(ntGroups).length ? buildSectionsHtml(ntGroups, renderKeyword) : "<p class='no-result'>無結果</p>"; 
+
+    // 直接寫入即可，不再經過 htmlFontFix 污染字體顏色
     document.getElementById('ot-results').innerHTML = otHtml;
     document.getElementById('nt-results').innerHTML = ntHtml;
 
     document.getElementById('results-area').style.display = 'block'; 
     document.getElementById('status').innerText = "搜尋完畢！"; 
 }
+
 
 // 💡 萬能繁簡高亮修正工具
 function htmlFontFix(htmlStr, trad, simp) {
