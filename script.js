@@ -162,9 +162,19 @@ function buildSectionsHtml(groups, keyword) {
 }
 
 function runSearch() {
+    
     let keyword = document.getElementById('keyword').value.trim();
     if (!keyword) return;
+
+    // 💡 新增：自動將輸入的簡體字轉換為繁體字
+    if (typeof s2t === 'function') {
+        keyword = s2t(keyword); // 如果使用者輸入「圣经」，這裡會自動變成「聖經」
+    }
+
     if (bibleData.length === 0) { alert("資料庫尚未加載完成。"); return; }
+    
+    // ... 後面的程式碼完全不用動 ...
+
 
     document.getElementById('status').innerText = "搜尋中...";
     
