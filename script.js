@@ -145,75 +145,79 @@ function buildSectionsHtml(groups, keyword) {
     return html;
 }
 
-function runSearch() {
-    
-    let keyword = document.getElementById('keyword').value.trim();
-    if (!keyword) return;
+function runSearch() { 
+    let rawKeyword = document.getElementById('keyword').value.trim(); 
+    if (!rawKeyword) return; 
 
-    // 💡 新增：自動將輸入的簡體字轉換為繁體字
-    if (typeof s2t === 'function') {
-        keyword = s2t(keyword); // 如果使用者輸入「圣经」，這裡會自動變成「聖經」
+    let keyword = rawKeyword;
+
+    // 💡 修正：适配 s2t-t2s 库的全局变量名和方法
+    if (typeof s2t_t2s === 'object' && typeof s2t_t2s.s2t === 'function') {
+        keyword = s2t_t2s.s2t(keyword); 
+        console.log(`[简繁转换] ${rawKeyword} -> ${keyword}`);
+    } else {
+        console.error("【错误】未能加载简繁转换库 s2t_t2s。");
     }
 
-    if (bibleData.length === 0) { alert("資料庫尚未加載完成。"); return; }
-    
-    // ... 後面的程式碼完全不用動 ...
+    if (bibleData.length === 0) {
+        alert("資料庫尚未加載完成。"); 
+        return; 
+    } 
 
+    document.getElementById('status').innerText = "搜尋中..."; 
+    let otGroups = {}; 
+    let ntGroups = {}; 
+    let otTotalVerses = 0; 
+    let ntTotalVerses = 0; 
 
-    document.getElementById('status').innerText = "搜尋中...";
-    
-    let otGroups = {};
-    let ntGroups = {};
-    let otTotalVerses = 0;
-    let ntTotalVerses = 0;
+    bibleData.forEach(entry => { 
+        const rawText = entry.text || ""; 
+        if (!rawText.includes(keyword)) return; 
 
-    bibleData.forEach(entry => {
-        const rawText = entry.text || "";
-        if (!rawText.includes(keyword)) return;
+        const bookId = parseInt(entry.book, 10); 
+        const strongIds = findAllStrongs(rawText, keyword); 
+        if (strongIds.length === 0) return; 
 
-        const bookId = parseInt(entry.book, 10);
-        const strongIds = findAllStrongs(rawText, keyword);
-        if (strongIds.length === 0) return;
+        const verseData = { 
+            book_id: bookId, 
+            book_name: BOOK_MAP[bookId] || `未知(${bookId})`, 
+            chapter: entry.chapter, 
+            verse: entry.verse, 
+            text: cleanStrongs(rawText) 
+        }; 
 
-        const verseData = {
-            book_id: bookId,
-            book_name: BOOK_MAP[bookId] || `未知(${bookId})`,
-            chapter: entry.chapter,
-            verse: entry.verse,
-            text: cleanStrongs(rawText)
-        };
+        strongIds.forEach(strongId => { 
+            if (bookId <= 39) { 
+                if (!otGroups[strongId]) otGroups[strongId] = []; 
+                otGroups[strongId].push({...verseData}); 
+                otTotalVerses++; 
+            } else { 
+                if (!ntGroups[strongId]) ntGroups[strongId] = []; 
+                ntGroups[strongId].push({...verseData}); 
+                ntTotalVerses++; 
+            } 
+        }); 
+    }); 
 
-        strongIds.forEach(strongId => {
-            if (bookId <= 39) {
-                if (!otGroups[strongId]) otGroups[strongId] = [];
-                otGroups[strongId].push({...verseData});
-                otTotalVerses++;
-            } else {
-                if (!ntGroups[strongId]) ntGroups[strongId] = [];
-                ntGroups[strongId].push({...verseData});
-                ntTotalVerses++;
-            }
-        });
-    });
+    document.getElementById('ot-count').innerText = `（找到 ${otTotalVerses} 筆）`; 
+    document.getElementById('nt-count').innerText = `（找到 ${ntTotalVerses} 筆）`; 
 
-    document.getElementById('ot-count').innerText = `（找到 ${otTotalVerses} 筆）`;
-    document.getElementById('nt-count').innerText = `（找到 ${ntTotalVerses} 筆）`;
+    const otHtml = Object.keys(otGroups).length ? buildSectionsHtml(otGroups, keyword) : "<p class='no-result'>無結果</p>"; 
+    const ntHtml = Object.keys(ntGroups).length ? buildSectionsHtml(ntGroups, keyword) : "<p class='no-result'>無結果</p>"; 
 
-    const otHtml = Object.keys(otGroups).length ? buildSectionsHtml(otGroups, keyword) : "<p class='no-result'>無結果</p>";
-    const ntHtml = Object.keys(ntGroups).length ? buildSectionsHtml(ntGroups, keyword) : "<p class='no-result'>無結果</p>";
+    document.getElementById('ot-results').innerHTML = otHtml; 
+    document.getElementById('nt-results').innerHTML = ntHtml; 
+    document.getElementById('results-area').style.display = 'block'; 
+    document.getElementById('status').innerText = "搜尋完畢！"; 
 
-    document.getElementById('ot-results').innerHTML = otHtml;
-    document.getElementById('nt-results').innerHTML = ntHtml;
-    document.getElementById('results-area').style.display = 'block';
-    document.getElementById('status').innerText = "搜尋完畢！";
-
-    // 📊 【新增：GA4 統計雷達】當使用者在 GitHub Pages 上點擊搜尋時，發送數據給 Google 報表
-    if (typeof gtag === 'function') {
-        gtag('event', 'bible_search', {
-            'search_term': keyword,        // 統計哪天、誰查了什麼字
-            'total_results': otTotalVerses + ntTotalVerses // 查詢成功了幾次
-        });
-    }
+    // 📊 GA4 統計：建议上报用户手打输入的 rawKeyword，更贴合用户真实行为分析
+    if (typeof gtag === 'function') { 
+        gtag('event', 'bible_search', { 
+            'search_term': rawKeyword, 
+            'converted_term': keyword,
+            'total_results': otTotalVerses + ntTotalVerses 
+        }); 
+    } 
 }
 
 function runReverseSearch() {
