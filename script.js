@@ -3,12 +3,11 @@ const BOOK_MAP = {
 };
 
 let bibleData = [];
-let strongsDict = {}; // 儲存你提供的原文辭典資料
+let strongsDict = {}; 
 
 window.onload = function() {
     document.getElementById('status').innerText = "正在載入聖經資料庫與原文辭典...";
 
-    // 同時載入兩個 JSON 檔案
     Promise.all([
         fetch('./chinesetrad.json').then(res => { if (!res.ok) throw new Error(); return res.json(); }),
         fetch('./strongs_dict.json').then(res => { if (!res.ok) throw new Error(); return res.json(); })
@@ -80,30 +79,19 @@ function escapeHtml(string) {
     });
 }
 
-/**
- * 💡 修改核心：從本地端載入的辭典資料進行字串拆解與內容渲染
- */
 function getLocalStrongsDefinitionHtml(strongId) {
-    // 檢查辭典裡有沒有這個編號 (例如：G12)
     const rawEntry = strongsDict[strongId];
-    
     if (!rawEntry) {
         return " ── <span style='color:#999; font-weight:normal; font-size:12px;'>（辭典中未錄入此編號）</span>";
     }
 
     try {
-        // 解析格式。範例："ἄβυσσος | 意義: depthless, ..."
-        // 以 " | " 為分界線，左邊是原文單字，右邊是定義
         const parts = rawEntry.split('|');
         const lemma = parts[0] ? parts[0].trim() : strongId;
         let definition = parts[1] ? parts[1].replace('意義:', '').trim() : "暫無釋義";
-        
-        // 為了防止換行符號破壞 HTML 排版，將 \n 換成網頁換行標籤 <br>
         definition = escapeHtml(definition).replace(/\n/g, '<br>');
-
         return ` ── <span class="original-word">${escapeHtml(lemma)}</span> <span class="english-def">${definition}</span>`;
     } catch (e) {
-        // 防禦性除錯，若格式有極少數不合預期，則直接顯示完整原字串
         return ` ── <span class="english-def">${escapeHtml(rawEntry)}</span>`;
     }
 }
@@ -121,14 +109,11 @@ function buildSectionsHtml(groups, keyword) {
             return parseInt(a.verse) - parseInt(b.verse);
         });
 
-        // 💡 這裡直接呼叫剛才寫好的 getLocalStrongsDefinitionHtml 函式，秒速生成內容
         const definitionHtml = getLocalStrongsDefinitionHtml(strongId);
-
-        // ✨ 新增判斷：如果 strongId 是以 'G' 或 'g' 開頭（新約希臘文），就定義 class 為 'nt-group'，否則為空字串（舊約紫色）
         const isNewTestament = strongId.trim().toUpperCase().startsWith('G');
         const ntClass = isNewTestament ? 'nt-group' : '';
 
-        // 這裡修改了第一行，將 ${ntClass} 動態注入到 class 屬性中
+        // 🛠️ 這裡修復了你舊程式碼中斷、錯位導致的語法錯誤
         html += `
           <div class='group-title ${ntClass}'>
             <span>原文編號: <strong>${strongId}</strong>${definitionHtml}</span>
@@ -139,8 +124,7 @@ function buildSectionsHtml(groups, keyword) {
               <tr><th style='width:25%'>書卷</th><th style='width:20%'>章節</th><th>經文內容</th></tr>
             </thead>
             <tbody>
-`        ;
-        
+        `;
 
         verses.forEach(v => {
             const safeText = escapeHtml(v.text);
@@ -222,6 +206,14 @@ function runSearch() {
     document.getElementById('nt-results').innerHTML = ntHtml;
     document.getElementById('results-area').style.display = 'block';
     document.getElementById('status').innerText = "搜尋完畢！";
+
+    // 📊 【新增：GA4 統計雷達】當使用者在 GitHub Pages 上點擊搜尋時，發送數據給 Google 報表
+    if (typeof gtag === 'function') {
+        gtag('event', 'bible_search', {
+            'search_term': keyword,        // 統計哪天、誰查了什麼字
+            'total_results': otTotalVerses + ntTotalVerses // 查詢成功了幾次
+        });
+    }
 }
 
 function runReverseSearch() {
@@ -233,8 +225,13 @@ function runReverseSearch() {
         return;
     }
     alert(`【功能開發中】\n你希望在輸入的內文中，找出「${targetWord}」對應的希臘文或希伯來文編號。`);
+    
+    // 📊 【新增：GA4 統計雷達】統計有多少人點選了反查模式
+    if (typeof gtag === 'function') {
+        gtag('event', 'bible_reverse_search_click', {
+            'target_word': targetWord
+        });
+    }
 }
-
-
 
 
