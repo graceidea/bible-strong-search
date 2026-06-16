@@ -179,47 +179,59 @@ function runSearch() {
         return; 
     } 
 
-    // 💡 步驟 1：自動偵測使用者輸入的是「繁體」還是「簡體」
+    // 📡 雷達 1：檢查總共加載了多少條簡體經文
+    console.log("【雷達 1】目前記憶體中的簡體經文總數為:", bibleSimpData.length);
+
+    // 💡 步驟 1：升級版繁簡特徵判斷，不再依賴第三方庫
     let isSimplified = false;
-    if (typeof s2t_t2s === 'object' && typeof s2t_t2s.s2t === 'function') {
-        // 如果手打的字轉成繁體後「不一樣」，代表使用者輸入的是簡體字（例如：输入"爱" -> 转出"愛"）
+    if (/[爱创造圣经国门们时后会种样里个]/g.test(rawKeyword)) {
+        isSimplified = true;
+    } else if (typeof s2t_t2s === 'object' && typeof s2t_t2s.s2t === 'function') {
         if (s2t_t2s.s2t(rawKeyword) !== rawKeyword) {
             isSimplified = true;
         }
     }
 
-    // 💡 步驟 2：核心切換！
-    // 輸入簡體，就 100% 使用簡體字庫 (chinesesimp.json) 和原始簡體關鍵字
-    // 輸入繁體，就 100% 使用繁體字庫 (chinesetrad.json) 和原始繁體關鍵字
+    // 💡 步驟 2：核心切換
     const currentBibleDatabase = isSimplified ? bibleSimpData : bibleData;
     const keyword = rawKeyword; 
 
-    console.log(`[字庫調用] 偵測到 ${isSimplified ? '簡體' : '繁體'} 輸入。正在檢索 ${isSimplified ? 'chinesesimp.json' : 'chinesetrad.json'}，關鍵字：${keyword}`);
+    // 📡 雷達 2：看看到底系統把你的「爱」歸類去哪本字庫
+    console.log(`【雷達 2】字庫選擇結果 -> 判定為${isSimplified ? '【簡體】' : '【繁體】'}輸入。決定去翻找的檔案是: ${isSimplified ? 'chinesesimp.json' : 'chinesetrad.json'}，搜尋關鍵字為: "${keyword}"`);
 
     document.getElementById('status').innerText = "搜尋中..."; 
     let otGroups = {}; 
     let ntGroups = {}; 
     let otTotalVerses = 0; 
     let ntTotalVerses = 0; 
+    let matchCountWithoutStrongs = 0; // 📡 雷達計數器
 
-    // 💡 步驟 3：精準巡迴檢索對應字庫
+    // 💡 步驟 3：巡迴檢索
     currentBibleDatabase.forEach(entry => { 
         const rawText = entry.text || ""; 
-        // 這裡會精準比對：簡體字對簡體經文（例如："爱" 比對 "神爱世人"）
+        
+        // 檢查這行經文有沒有包含你的關鍵字
         if (!rawText.includes(keyword)) return; 
+        
+        matchCountWithoutStrongs++; // 找到了包含「爱」的經文，計數器 +1
 
         const bookId = parseInt(entry.book, 10); 
-        
-        // 抓取 Strong 編號
         const strongIds = findAllStrongs(rawText, keyword); 
-        if (strongIds.length === 0) return; 
+        
+        // 📡 雷達 3：如果找到了經文，卻卡在 Strong 編號抓不到，印出這行經文的真面目
+        if (strongIds.length === 0) {
+            if (matchCountWithoutStrongs <= 3) {
+                console.log(`【雷達 3 預警】找到了包含 "${keyword}" 的經文，但 findAllStrongs 抓不到編號！經文原文為:`, rawText);
+            }
+            return; 
+        } 
 
         const verseData = { 
             book_id: bookId, 
             book_name: BOOK_MAP[bookId] || `未知(${bookId})`, 
             chapter: entry.chapter, 
             verse: entry.verse, 
-            text: cleanStrongs(rawText) // 這裡會自動清洗掉內嵌的 {H7225} 標籤，保留純文字
+            text: cleanStrongs(rawText) 
         }; 
 
         strongIds.forEach(strongId => { 
@@ -235,10 +247,12 @@ function runSearch() {
         }); 
     }); 
 
+    // 📡 雷達 4：印出最終比對統計
+    console.log(`【雷達 4 總結】純文字匹配到了 ${matchCountWithoutStrongs} 節經文。其中成功提取出 Strong 編號並歸類的舊約有 ${otTotalVerses} 筆，新約有 ${ntTotalVerses} 筆。`);
+
     document.getElementById('ot-count').innerText = `（找到 ${otTotalVerses} 筆）`; 
     document.getElementById('nt-count').innerText = `（找到 ${ntTotalVerses} 筆）`; 
 
-    // 💡 步驟 4：建立 HTML 報表並高亮關鍵字
     const otHtml = Object.keys(otGroups).length ? buildSectionsHtml(otGroups, keyword) : "<p class='no-result'>無結果</p>"; 
     const ntHtml = Object.keys(ntGroups).length ? buildSectionsHtml(ntGroups, keyword) : "<p class='no-result'>無結果</p>"; 
 
@@ -247,15 +261,11 @@ function runSearch() {
     document.getElementById('results-area').style.display = 'block'; 
     document.getElementById('status').innerText = "搜尋完畢！"; 
 
-    // 📊 GA4 數據統計
     if (typeof gtag === 'function') { 
-        gtag('event', 'bible_search', { 
-            'search_term': rawKeyword, 
-            'database_used': isSimplified ? 'simplified' : 'traditional',
-            'total_results': otTotalVerses + ntTotalVerses 
-        }); 
+        gtag('event', 'bible_search', { 'search_term': rawKeyword, 'total_results': otTotalVerses + ntTotalVerses }); 
     } 
 }
+
  
 
 // 💡 輔助高亮修正函式：確保繁體和簡體字在表格裡都能變成黃色高亮
