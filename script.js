@@ -21,6 +21,29 @@ window.onload = function() {
         bibleData = bibleTrad;      
         bibleSimpData = bibleSimp;  
         strongsDict = dict; 
+        
+        // 💡 【核心新增】利用你的 BOOK_MAP 自動填充 66 卷書與範圍選項到 iPad 下拉選單中
+        const filterSelect = document.getElementById('book-filter');
+        if (filterSelect) {
+            // 初始化選單：第 1 項為「所有書卷」（代表“空”不篩選，全列出來）
+            filterSelect.innerHTML = '<option value="all">🔍 所有書卷（全部）</option>';
+            
+            // 插入「舊約全部」與「新約全部」的範圍大標籤
+            filterSelect.innerHTML += '<option value="ot_all">✨ 舊約全部 (創世記 - 瑪拉基書)</option>';
+            filterSelect.innerHTML += '<option value="nt_all">✨ 新約全部 (馬太福音 - 啟示錄)</option>';
+            
+            // 插入一條精美分隔線，讓介面在 iPad 上更好看
+            filterSelect.innerHTML += '<option disabled>----------------------------------</option>';
+
+            // 根據你的 BOOK_MAP 結構 (1 到 66)，自動動態生成每一本單獨書卷的選項
+            Object.keys(BOOK_MAP).forEach(id => {
+                const option = document.createElement('option');
+                option.value = id;
+                option.textContent = BOOK_MAP[id];
+                filterSelect.appendChild(option);
+            });
+        }
+
         document.getElementById('status').innerText = "所有資料庫載入完成，可以開始搜尋！"; 
     }) 
     .catch(err => { 
@@ -28,6 +51,7 @@ window.onload = function() {
         console.error(err); 
     }); 
 };
+
 
 function switchMode(mode) {
     document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
