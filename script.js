@@ -174,50 +174,53 @@ function runSearch() {
     let rawKeyword = document.getElementById('keyword').value.trim(); 
     if (!rawKeyword) return; 
 
-    // 📡 【iPad 雷達 1：檢查字庫加載狀態】
     if (bibleData.length === 0 || bibleSimpData.length === 0) {
-        alert(`【雷達 1 警告】資料庫未加載完成！\n繁體庫數量: ${bibleData.length}\n簡體庫數量: ${bibleSimpData.length}\n(如果簡體庫是 0，代表 chinesesimp.json 檔案名稱、路徑有錯，或檔案是空的)`); 
+        alert("資料庫尚未加載完成。"); 
         return; 
     } 
 
-    // 💡 步驟 1：字體判斷
+    // 💡 步驟 1：同時準備好這組字的「繁體版」與「簡體版」
+    let tradKeyword = rawKeyword;
+    let simpKeyword = rawKeyword;
+
+    if (typeof s2t_t2s === 'object') {
+        if (typeof s2t_t2s.s2t === 'function') tradKeyword = s2t_t2s.s2t(rawKeyword); // 確保拿到繁體（如：喜樂）
+        if (typeof s2t_t2s.t2s === 'function') simpKeyword = s2t_t2s.t2s(rawKeyword); // 確保拿到簡體（如：喜乐）
+    }
+
+    // 💡 步驟 2：字體特徵偵測，決定顯示哪種字體
     let isSimplified = false;
-    if (/[爱创造圣经国门们时后会种样里个]/g.test(rawKeyword)) {
+    if (/[爱创造圣经国门们时后会种样里个乐]/g.test(rawKeyword) || tradKeyword !== rawKeyword) {
         isSimplified = true;
-    } else if (typeof s2t_t2s === 'object' && typeof s2t_t2s.s2t === 'function') {
-        if (s2t_t2s.s2t(rawKeyword) !== rawKeyword) {
-            isSimplified = true;
-        }
     }
 
-    // 💡 步驟 2：核心切換
+    // 根據偵測結果，挑選主要翻找的字庫
     const currentBibleDatabase = isSimplified ? bibleSimpData : bibleData;
-    const keyword = rawKeyword; 
-
-    // 📡 【iPad 雷達 2：彈窗告訴你系統選了哪本字庫】
-    // 為了不打擾繁體使用者，我們只在搜尋簡體字時跳出彈窗確認
-    if (isSimplified) {
-        alert(`【雷達 2 報告】\n系統判定你輸入的是【簡體字】\n目前正準備翻找：chinesesimp.json\n簡體庫內經文總數為：${bibleSimpData.length} 條`);
-    }
 
     document.getElementById('status').innerText = "搜尋中..."; 
     let otGroups = {}; 
     let ntGroups = {}; 
     let otTotalVerses = 0; 
     let ntTotalVerses = 0; 
-    let matchCountWithoutStrongs = 0; // 純文字匹配計數器
 
-    // 💡 步驟 3：巡迴檢索
+    // 💡 步驟 3：雙軌搜尋！只要經文包含繁體「或」簡體，通通抓出來！
     currentBibleDatabase.forEach(entry => { 
         const rawText = entry.text || ""; 
         
-        if (!rawText.includes(keyword)) return; 
-        
-        matchCountWithoutStrongs++; // 找到了包含「爱」的簡體經文
+        // ⭐ 這裡是最關鍵的容錯：經文包含繁體關鍵字，或者包含簡體關鍵字，都算中！
+        let matchedKeyword = "";
+        if (rawText.includes(simpKeyword)) {
+            matchedKeyword = simpKeyword;
+        } else if (rawText.includes(tradKeyword)) {
+            matchedKeyword = tradKeyword;
+        } else {
+            return; // 都不包含就跳過
+        }
 
         const bookId = parseInt(entry.book, 10); 
-        const strongIds = findAllStrongs(rawText, keyword); 
         
+        // 用成功匹配到的那個中文字組去抓 Strong 編號
+        const strongIds = findAllStrongs(rawText, matchedKeyword); 
         if (strongIds.length === 0) return; 
 
         const verseData = { 
@@ -241,26 +244,34 @@ function runSearch() {
         }); 
     }); 
 
-    // 📡 【iPad 雷達 3：彈窗回報匹配結果】
-    if (isSimplified) {
-        alert(`【雷達 3 最終回報】\n純文字匹配到含有「${keyword}」的經文共有：${matchCountWithoutStrongs} 節。\n其中成功提取出 Strong 原文編號並歸類的：\n舊約：${otTotalVerses} 筆\n新約：${ntTotalVerses} 筆`);
-    }
-
     document.getElementById('ot-count').innerText = `（找到 ${otTotalVerses} 筆）`; 
     document.getElementById('nt-count').innerText = `（找到 ${ntTotalVerses} 筆）`; 
 
-    const otHtml = Object.keys(otGroups).length ? buildSectionsHtml(otGroups, keyword) : "<p class='no-result'>無結果</p>"; 
-    const ntHtml = Object.keys(ntGroups).length ? buildSectionsHtml(ntGroups, keyword) : "<p class='no-result'>無結果</p>"; 
+    // 💡 步驟 4：高亮時同時相容繁簡體
+    const otHtml = Object.keys(otGroups).length ? buildSectionsHtml(otGroups, simpKeyword) : "<p class='no-result'>無結果</p>"; 
+    const ntHtml = Object.keys(ntGroups).length ? buildSectionsHtml(ntGroups, simpKeyword) : "<p class='no-result'>無結果</p>"; 
 
-    document.getElementById('ot-results').innerHTML = otHtml; 
-    document.getElementById('nt-results').innerHTML = ntHtml; 
+    // 呼叫修補工具，確保畫面上的「喜乐」和「喜樂」都能變黃色高亮
+    document.getElementById('ot-results').innerHTML = htmlFontFix(otHtml, tradKeyword, simpKeyword);
+    document.getElementById('nt-results').innerHTML = htmlFontFix(ntHtml, tradKeyword, simpKeyword);
     document.getElementById('results-area').style.display = 'block'; 
     document.getElementById('status').innerText = "搜尋完畢！"; 
-
-    if (typeof gtag === 'function') { 
-        gtag('event', 'bible_search', { 'search_term': rawKeyword, 'total_results': otTotalVerses + ntTotalVerses }); 
-    } 
 }
+
+// 💡 繁簡高亮輔助工具（如果原本的 buildSectionsHtml 漏掉了其中一種字體，這裡強制補上黃色高亮）
+function htmlFontFix(htmlStr, trad, simp) {
+    if (!htmlStr) return htmlStr;
+    let res = htmlStr;
+    const safeTrad = String(trad).replace(/[&<>"']/g, s => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[s]));
+    const safeSimp = String(simp).replace(/[&<>"']/g, s => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[s]));
+    
+    res = res.split(safeTrad).join(`<span class='hl'>${safeTrad}</span>`);
+    if (safeTrad !== safeSimp) {
+        res = res.split(safeSimp).join(`<span class='hl'>${safeSimp}</span>`);
+    }
+    return res;
+}
+
 
 
  
