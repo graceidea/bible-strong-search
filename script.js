@@ -174,15 +174,13 @@ function runSearch() {
     let rawKeyword = document.getElementById('keyword').value.trim(); 
     if (!rawKeyword) return; 
 
+    // 📡 【iPad 雷達 1：檢查字庫加載狀態】
     if (bibleData.length === 0 || bibleSimpData.length === 0) {
-        alert("資料庫尚未加載完成。"); 
+        alert(`【雷達 1 警告】資料庫未加載完成！\n繁體庫數量: ${bibleData.length}\n簡體庫數量: ${bibleSimpData.length}\n(如果簡體庫是 0，代表 chinesesimp.json 檔案名稱、路徑有錯，或檔案是空的)`); 
         return; 
     } 
 
-    // 📡 雷達 1：檢查總共加載了多少條簡體經文
-    console.log("【雷達 1】目前記憶體中的簡體經文總數為:", bibleSimpData.length);
-
-    // 💡 步驟 1：升級版繁簡特徵判斷，不再依賴第三方庫
+    // 💡 步驟 1：字體判斷
     let isSimplified = false;
     if (/[爱创造圣经国门们时后会种样里个]/g.test(rawKeyword)) {
         isSimplified = true;
@@ -196,35 +194,31 @@ function runSearch() {
     const currentBibleDatabase = isSimplified ? bibleSimpData : bibleData;
     const keyword = rawKeyword; 
 
-    // 📡 雷達 2：看看到底系統把你的「爱」歸類去哪本字庫
-    console.log(`【雷達 2】字庫選擇結果 -> 判定為${isSimplified ? '【簡體】' : '【繁體】'}輸入。決定去翻找的檔案是: ${isSimplified ? 'chinesesimp.json' : 'chinesetrad.json'}，搜尋關鍵字為: "${keyword}"`);
+    // 📡 【iPad 雷達 2：彈窗告訴你系統選了哪本字庫】
+    // 為了不打擾繁體使用者，我們只在搜尋簡體字時跳出彈窗確認
+    if (isSimplified) {
+        alert(`【雷達 2 報告】\n系統判定你輸入的是【簡體字】\n目前正準備翻找：chinesesimp.json\n簡體庫內經文總數為：${bibleSimpData.length} 條`);
+    }
 
     document.getElementById('status').innerText = "搜尋中..."; 
     let otGroups = {}; 
     let ntGroups = {}; 
     let otTotalVerses = 0; 
     let ntTotalVerses = 0; 
-    let matchCountWithoutStrongs = 0; // 📡 雷達計數器
+    let matchCountWithoutStrongs = 0; // 純文字匹配計數器
 
     // 💡 步驟 3：巡迴檢索
     currentBibleDatabase.forEach(entry => { 
         const rawText = entry.text || ""; 
         
-        // 檢查這行經文有沒有包含你的關鍵字
         if (!rawText.includes(keyword)) return; 
         
-        matchCountWithoutStrongs++; // 找到了包含「爱」的經文，計數器 +1
+        matchCountWithoutStrongs++; // 找到了包含「爱」的簡體經文
 
         const bookId = parseInt(entry.book, 10); 
         const strongIds = findAllStrongs(rawText, keyword); 
         
-        // 📡 雷達 3：如果找到了經文，卻卡在 Strong 編號抓不到，印出這行經文的真面目
-        if (strongIds.length === 0) {
-            if (matchCountWithoutStrongs <= 3) {
-                console.log(`【雷達 3 預警】找到了包含 "${keyword}" 的經文，但 findAllStrongs 抓不到編號！經文原文為:`, rawText);
-            }
-            return; 
-        } 
+        if (strongIds.length === 0) return; 
 
         const verseData = { 
             book_id: bookId, 
@@ -247,8 +241,10 @@ function runSearch() {
         }); 
     }); 
 
-    // 📡 雷達 4：印出最終比對統計
-    console.log(`【雷達 4 總結】純文字匹配到了 ${matchCountWithoutStrongs} 節經文。其中成功提取出 Strong 編號並歸類的舊約有 ${otTotalVerses} 筆，新約有 ${ntTotalVerses} 筆。`);
+    // 📡 【iPad 雷達 3：彈窗回報匹配結果】
+    if (isSimplified) {
+        alert(`【雷達 3 最終回報】\n純文字匹配到含有「${keyword}」的經文共有：${matchCountWithoutStrongs} 節。\n其中成功提取出 Strong 原文編號並歸類的：\n舊約：${otTotalVerses} 筆\n新約：${ntTotalVerses} 筆`);
+    }
 
     document.getElementById('ot-count').innerText = `（找到 ${otTotalVerses} 筆）`; 
     document.getElementById('nt-count').innerText = `（找到 ${ntTotalVerses} 筆）`; 
@@ -265,6 +261,7 @@ function runSearch() {
         gtag('event', 'bible_search', { 'search_term': rawKeyword, 'total_results': otTotalVerses + ntTotalVerses }); 
     } 
 }
+
 
  
 
