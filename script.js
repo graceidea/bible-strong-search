@@ -150,15 +150,43 @@ function buildSectionsHtml(groups, keyword) {
         `;
 
         verses.forEach(v => {
-            const safeText = escapeHtml(v.text);
-            const safeKeyword = escapeHtml(keyword);
-            const highlighted = safeText.split(safeKeyword).join(`<span class='hl'>${safeKeyword}</span>`);
+            // 💡 步驟 1：為了實現精準染色，我們必須去對應的原始字庫裡，撈出帶有 {Gxxxx} 標籤的原始經文
+            // 這樣才能知道哪一個「爱」黏著哪一個編號！
+            const currentDb = strongId.toUpperCase().startsWith('G') || strongId.toUpperCase().startsWith('H') ? bibleSimpData : bibleData;
+            const originalEntry = currentDb.find(s => s.book == v.book_id && s.chapter == v.chapter && s.verse == v.verse);
+            
+            let highlightedText = "";
+
+            if (originalEntry && originalEntry.text) {
+                let rawText = originalEntry.text;
+                
+                // 💡 步驟 2：利用正則表達式，精準捕捉「當前原文編號前面的那一個漢字」
+                // 例如：當前分組是 G25，正則會捕捉到 "爱{G25}" 或 "爱<{G25}>"
+                const escapedStrong = strongId.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+                
+                // 建立一個正則：配對「你的關鍵字(例如:爱)」+ 可能存在的特殊符號 + 當前的 Strong 編號
+                // 使用 ( 括號 ) 包裹關鍵字，方便後面替換
+                const targetPattern = new RegExp(`(${keyword})([<{ ]*${escapedStrong}[>} ]*)`, "g");
+                
+                // 把「唯獨黏著這個編號」的關鍵字，染成鮮豔的紅色 (或者你喜歡的樣式)
+                rawText = rawText.replace(targetPattern, `<span style="color: red; font-weight: bold;">$1</span>$2`);
+                
+                // 💡 步驟 3：把這行經文裡「其他」不屬於當前編號的關鍵字，染成普通黃色高亮（保持原功能）
+                rawText = rawText.split(keyword).join(`<span class='hl'>${keyword}</span>`);
+                
+                // 💡 步驟 4：清洗掉所有殘留的 {Gxxxx} 標籤，還原乾淨的經文呈現在網頁畫面上
+                highlightedText = cleanStrongs(rawText);
+            } else {
+                // 備用方案：如果找不到原始標籤，退回普通高亮
+                const safeText = escapeHtml(v.text);
+                highlightedText = safeText.split(keyword).join(`<span class='hl'>${keyword}</span>`);
+            }
             
             html += `
                 <tr>
                     <td>${v.book_name}</td>
                     <td>${v.chapter}:${v.verse}</td>
-                    <td>${highlighted}</td>
+                    <td>${highlightedText}</td>
                 </tr>
             `;
         });
@@ -167,6 +195,7 @@ function buildSectionsHtml(groups, keyword) {
     });
     return html;
 }
+
 
 
 
