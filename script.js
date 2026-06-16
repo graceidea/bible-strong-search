@@ -45,26 +45,44 @@ function switchMode(mode) {
 function cleanStrongs(text) {
     if (!text) return "";
     let t = String(text);
-    t = t.replace(/[<{][GH]\d+[a-zA-Z]?[>}]/g, '');
-    t = t.replace(/\b[GH]\d+[a-zA-Z]?\b/g, '');
+    // 同時清洗掉 {H1234}, <G1234>, <{H1234}> 等所有可能的原文編號標籤
+    t = t.replace(/[<{]?[GH]\d+[a-zA-Z]?[>}]?/g, '');
+    // 移除可能殘留的空括號或特殊符號
+    t = t.replace(/[<>{}[\]]/g, '');
     return t.trim();
 }
 
 function findAllStrongs(rawText, keyword) {
+    // 1. 先把關鍵字安全轉義
     const escaped = keyword.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
-    const pattern = new RegExp(escaped + "((?:[<{][GH]\\d+[a-zA-Z]?[>}])+)", "g");
+    
+    // 2. 💡 超強力正則：匹配 關鍵字 + 後面可能帶有的 <, {, 或直接緊跟著的 G/H 編號
+    // 這個設計完美適配 "创造{H1254}" 或 "創造<{G1234}>"
+    const pattern = new RegExp(escaped + "(?:[<{ ]*)([GH]\\d+[a-zA-Z]?)(?:[>} ]*)", "g");
     
     let strongs = [];
     let match;
+    
+    // 3. 循環找出所有匹配的原文編號
     while ((match = pattern.exec(rawText)) !== null) {
-        const block = match[1];
-        const subMatches = block.match(/[GH]\d+[a-zA-Z]?/g);
-        if (subMatches) {
-            strongs.push(...subMatches);
+        if (match[1]) {
+            strongs.push(match[1]); // 提取出純粹的 "H7225" 或 "G430"
         }
     }
-    return [...new Set(strongs)]; 
+    
+    // 4. 如果上面的嚴格鄰近比對沒抓到，啟動「保底後備方案」：
+    // 只要這行經文裡包含關鍵字，我們就把這行經文裡出現的所有 Strong 編號通通抓出來歸類！
+    if (strongs.length === 0) {
+        const fallbackPattern = /[GH]\d+[a-zA-Z]?/g;
+        const allMatches = rawText.match(fallbackPattern);
+        if (allMatches) {
+            strongs.push(...allMatches);
+        }
+    }
+    
+    return [...new Set(strongs)]; // 去除重複的編號
 }
+
 
 function strongSortKey(s) {
     const match = s.match(/([GH])(\d+)/);
