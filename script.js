@@ -179,22 +179,21 @@ function runSearch() {
         return; 
     } 
 
-    // 💡 步驟 1：同時準備好這組字的「繁體版」與「簡體版」
+    // 💡 步驟 1：同時準備好繁體與簡體關鍵字
     let tradKeyword = rawKeyword;
     let simpKeyword = rawKeyword;
 
     if (typeof s2t_t2s === 'object') {
-        if (typeof s2t_t2s.s2t === 'function') tradKeyword = s2t_t2s.s2t(rawKeyword); // 確保拿到繁體（如：喜樂）
-        if (typeof s2t_t2s.t2s === 'function') simpKeyword = s2t_t2s.t2s(rawKeyword); // 確保拿到簡體（如：喜乐）
+        if (typeof s2t_t2s.s2t === 'function') tradKeyword = s2t_t2s.s2t(rawKeyword); // 喜樂
+        if (typeof s2t_t2s.t2s === 'function') simpKeyword = s2t_t2s.t2s(rawKeyword); // 喜乐
     }
 
-    // 💡 步驟 2：字體特徵偵測，決定顯示哪種字體
+    // 自動判定是否需要去翻簡體庫
     let isSimplified = false;
     if (/[爱创造圣经国门们时后会种样里个乐]/g.test(rawKeyword) || tradKeyword !== rawKeyword) {
         isSimplified = true;
     }
 
-    // 根據偵測結果，挑選主要翻找的字庫
     const currentBibleDatabase = isSimplified ? bibleSimpData : bibleData;
 
     document.getElementById('status').innerText = "搜尋中..."; 
@@ -203,24 +202,30 @@ function runSearch() {
     let otTotalVerses = 0; 
     let ntTotalVerses = 0; 
 
-    // 💡 步驟 3：雙軌搜尋！只要經文包含繁體「或」簡體，通通抓出來！
+    // 💡 步驟 2：核心搜尋邏輯（解決字與字之間夾帶編號的問題）
     currentBibleDatabase.forEach(entry => { 
         const rawText = entry.text || ""; 
         
-        // ⭐ 這裡是最關鍵的容錯：經文包含繁體關鍵字，或者包含簡體關鍵字，都算中！
-        let matchedKeyword = "";
-        if (rawText.includes(simpKeyword)) {
-            matchedKeyword = simpKeyword;
-        } else if (rawText.includes(tradKeyword)) {
-            matchedKeyword = tradKeyword;
-        } else {
-            return; // 都不包含就跳過
+        // ⭐ 【降維打擊】先把經文裡的 {H1234} 全部拔掉，變成純中文字串！
+        // 這樣 "喜{H8057}乐{H8056}" 就會變成乾乾淨淨的 "喜乐"
+        const cleanText = cleanStrongs(rawText); 
+        
+        // 用純中文字去比對，不管是簡體還是繁體，只要中了就符合！
+        if (!cleanText.includes(simpKeyword) && !cleanText.includes(tradKeyword)) {
+            return; 
         }
 
         const bookId = parseInt(entry.book, 10); 
         
-        // 用成功匹配到的那個中文字組去抓 Strong 編號
-        const strongIds = findAllStrongs(rawText, matchedKeyword); 
+        // ⭐ 【精準抓取】既然純文字中了，我們直接從「整行」rawText 裡把所有原文編號打包撈出來
+        // 這樣就不怕關鍵字字體不對或者被編號切斷的問題了！
+        let strongIds = [];
+        const fallbackPattern = /[GH]\d+[a-zA-Z]?/g;
+        const allMatches = rawText.match(fallbackPattern);
+        if (allMatches) {
+            strongIds = [...new Set(allMatches)];
+        }
+
         if (strongIds.length === 0) return; 
 
         const verseData = { 
@@ -228,7 +233,7 @@ function runSearch() {
             book_name: BOOK_MAP[bookId] || `未知(${bookId})`, 
             chapter: entry.chapter, 
             verse: entry.verse, 
-            text: cleanStrongs(rawText) 
+            text: cleanText // 網頁畫面上顯示乾淨無編號的經文
         }; 
 
         strongIds.forEach(strongId => { 
@@ -247,16 +252,32 @@ function runSearch() {
     document.getElementById('ot-count').innerText = `（找到 ${otTotalVerses} 筆）`; 
     document.getElementById('nt-count').innerText = `（找到 ${ntTotalVerses} 筆）`; 
 
-    // 💡 步驟 4：高亮時同時相容繁簡體
+    // 💡 步驟 3：高亮與渲染
     const otHtml = Object.keys(otGroups).length ? buildSectionsHtml(otGroups, simpKeyword) : "<p class='no-result'>無結果</p>"; 
     const ntHtml = Object.keys(ntGroups).length ? buildSectionsHtml(ntGroups, simpKeyword) : "<p class='no-result'>無結果</p>"; 
 
-    // 呼叫修補工具，確保畫面上的「喜乐」和「喜樂」都能變黃色高亮
+    // 雙向強制高亮修正
     document.getElementById('ot-results').innerHTML = htmlFontFix(otHtml, tradKeyword, simpKeyword);
     document.getElementById('nt-results').innerHTML = htmlFontFix(ntHtml, tradKeyword, simpKeyword);
     document.getElementById('results-area').style.display = 'block'; 
     document.getElementById('status').innerText = "搜尋完畢！"; 
 }
+
+// 💡 萬能繁簡高亮修正工具
+function htmlFontFix(htmlStr, trad, simp) {
+    if (!htmlStr) return htmlStr;
+    let res = htmlStr;
+    const safeTrad = String(trad).replace(/[&<>"']/g, s => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[s]));
+    const safeSimp = String(simp).replace(/[&<>"']/g, s => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[s]));
+    
+    res = res.split(safeTrad).join(`<span class='hl'>${safeTrad}</span>`);
+    if (safeTrad !== safeSimp) {
+        res = res.split(safeSimp).join(`<span class='hl'>${safeSimp}</span>`);
+    }
+    return res;
+}
+
+        
 
 // 💡 繁簡高亮輔助工具（如果原本的 buildSectionsHtml 漏掉了其中一種字體，這裡強制補上黃色高亮）
 function htmlFontFix(htmlStr, trad, simp) {
