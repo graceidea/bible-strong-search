@@ -188,27 +188,29 @@ function buildSectionsHtml(groups, keyword) {
                 let processedLine = "";
 
                 tokens.forEach(token => {
-                    // 💡 2. 提取出這個單元裡純粹的中文字（例如從 "相爱{G25}" 中提取出 "相爱"）
-                    let chineseChar = token.replace(/[<{ ]*[GH]\d+[a-zA-Z]?[>} ]*/g, '').trim();
-                    
-                    // 💡 3. 如果這個中文字塊裡面「包含」了我們要找的關鍵字 (如 "相爱" 包含了 "爱")
-                    if (chineseChar.includes(keyword)) {
-                        
-                        // 檢查這個詞組後面黏著的是不是目前這個表格的原文編號
-                        if (token.includes(strongId)) {
-                            // ⭐ 符合當前編號！將詞組裡面的關鍵字精準切換成【紅色】
-                            let coloredWord = chineseChar.split(keyword).join(`<span style="color: red; font-weight: bold;">${keyword}</span>`);
-                            processedLine += coloredWord;
-                        } else {
-                            // ⭐ 雖然包含關鍵字，但編號是別人的！將其標記為【黃色高亮】
-                            let highlightedWord = chineseChar.split(keyword).join(`<span class="hl">${keyword}</span>`);
-                            processedLine += highlightedWord;
-                        }
-                    } else {
-                        // 💡 4. 完全不包含關鍵字，直接還原純中文
-                        processedLine += chineseChar;
-                    }
-                });
+    				// 💡 1. 提取出這個單元裡純粹的中文字
+    				let chineseChar = token.replace(/[<{ ]*[GH]\d+[a-zA-Z]?[>} ]*/g, '');
+    
+    				// ⭐ 【新增強效清洗】不管正則切得乾不乾淨，強制把所有殘留的括號 {} <> [] 通通拔除，解決開頭多出「}」的問題！
+    				chineseChar = chineseChar.replace(/[<>{}[\]]/g, '').trim();
+    
+    				// 💡 2. 如果這個中文字塊裡面「包含」了我們要找的關鍵字
+    				if (chineseChar && chineseChar.includes(keyword)) {
+        				if (token.includes(strongId)) {
+            				// 符合當前編號！將詞組裡面的關鍵字精準切換成【紅色】
+            				let coloredWord = chineseChar.split(keyword).join(`<span style="color: red; font-weight: bold;">${keyword}</span>`);
+            				processedLine += coloredWord;
+        				} else {
+            				// 雖然包含關鍵字，但編號是別人的！將其標記為【黃色高亮】
+            				let highlightedWord = chineseChar.split(keyword).join(`<span class="hl">${keyword}</span>`);
+            				processedLine += highlightedWord;
+        				}
+    				} else {
+        				// 💡 3. 完全不包含關鍵字，直接還原純中文
+        				processedLine += chineseChar;
+    				}
+				});
+
 
                 highlightedText = processedLine;
             } else {
