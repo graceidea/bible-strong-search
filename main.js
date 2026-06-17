@@ -158,4 +158,19 @@ function switchMode(mode) {
 // 原文反查留空，你可以直接把你原本的 runReverseSearch() 代碼貼在下方
 function runReverseSearch() {
     // 貼上你原本的反查程式碼...
+    const rawInputText = document.getElementById('reverse-text').value.trim();
+    const targetWord = document.getElementById('reverse-target').value.trim();
+
+    if (!rawInputText || !targetWord) {
+        alert("請輸入參考經文與要反查的特定中文字！");
+        return;
+    }
+    alert(`【功能開發中】\n你希望在輸入的內文中，找出「${targetWord}」對應的希臘文或希伯來文編號。`);
+    
+    // 📊 GA4 數據統計上報反查次數
+    if (typeof gtag === 'function') {
+        gtag('event', 'bible_reverse_search_click', {
+            'target_word': targetWord
+        });
+    }
 }
