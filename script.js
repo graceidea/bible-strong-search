@@ -182,35 +182,37 @@ function buildSectionsHtml(groups, keyword) {
             if (originalEntry && originalEntry.text) {
                 let rawText = originalEntry.text;
                 
-                // 💡 1. 精準拆解：把經文拆成 [ "相爱{G25}", "你们{G5210}" ] 這樣帶有編號的晶片單元
+                // ⭐ 【第一步：全局大掃除】
+                // 如果經文的最開頭出現了類似 {G3956} 或孤立的 }、{ 符號，直接在這裡用全局正則將其蒸發！
+                // 這行正則能把所有不黏著中文字的純編號與孤立大括號在切片前全部洗掉
+                rawText = rawText.replace(/^[<{ ]*[GH]\d+[a-zA-Z]?[>} ]*/g, ''); 
+                rawText = rawText.replace(/^[<>{}[\]\s]+/g, ''); // 再次確保開頭絕對沒有任何殘留大括號
+
+                // 💡 2. 精準拆解
                 const tokenPattern = /([^<{GHe\d\s]+(?:[<{ ]*[GH]\d+[a-zA-Z]?[>} ]*)+)|([^<{GHe\d\s]+)/g;
                 let tokens = rawText.match(tokenPattern) || [rawText];
                 let processedLine = "";
 
                 tokens.forEach(token => {
-    				// 💡 1. 提取出這個單元裡純粹的中文字
-    				let chineseChar = token.replace(/[<{ ]*[GH]\d+[a-zA-Z]?[>} ]*/g, '');
-    
-    				// ⭐ 【新增強效清洗】不管正則切得乾不乾淨，強制把所有殘留的括號 {} <> [] 通通拔除，解決開頭多出「}」的問題！
-    				chineseChar = chineseChar.replace(/[<>{}[\]]/g, '').trim();
-    
-    				// 💡 2. 如果這個中文字塊裡面「包含」了我們要找的關鍵字
-    				if (chineseChar && chineseChar.includes(keyword)) {
-        				if (token.includes(strongId)) {
-            				// 符合當前編號！將詞組裡面的關鍵字精準切換成【紅色】
-            				let coloredWord = chineseChar.split(keyword).join(`<span style="color: red; font-weight: bold;">${keyword}</span>`);
-            				processedLine += coloredWord;
-        				} else {
-            				// 雖然包含關鍵字，但編號是別人的！將其標記為【黃色高亮】
-            				let highlightedWord = chineseChar.split(keyword).join(`<span class="hl">${keyword}</span>`);
-            				processedLine += highlightedWord;
-        				}
-    				} else {
-        				// 💡 3. 完全不包含關鍵字，直接還原純中文
-        				processedLine += chineseChar;
-    				}
-				});
-
+                    // 💡 3. 提取純中文字
+                    let chineseChar = token.replace(/[<{ ]*[GH]\d+[a-zA-Z]?[>} ]*/g, '');
+                    chineseChar = chineseChar.replace(/[<>{}[\]]/g, '').trim();
+                    
+                    if (chineseChar && chineseChar.includes(keyword)) {
+                        if (token.includes(strongId)) {
+                            // 符合當前編號！紅色粗體
+                            let coloredWord = chineseChar.split(keyword).join(`<span style="color: red; font-weight: bold;">${keyword}</span>`);
+                            processedLine += coloredWord;
+                        } else {
+                            // 雖然包含關鍵字，但編號是別人的！黃色高亮
+                            let highlightedWord = chineseChar.split(keyword).join(`<span class="hl">${keyword}</span>`);
+                            processedLine += highlightedWord;
+                        }
+                    } else {
+                        // 完全不包含關鍵字，還原純中文
+                        processedLine += chineseChar;
+                    }
+                });
 
                 highlightedText = processedLine;
             } else {
@@ -231,6 +233,7 @@ function buildSectionsHtml(groups, keyword) {
     });
     return html;
 }
+
 
 
 
