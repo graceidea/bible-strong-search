@@ -182,36 +182,36 @@ function buildSectionsHtml(groups, keyword) {
             if (originalEntry && originalEntry.text) {
                 let rawText = originalEntry.text;
                 
-                // 💡 【全新革命性精準比對演算法】
-                // 用正則把經文拆解，例如將 "创造{H1254}天{H8064}" 拆成：
-                // ["创造{H1254}", "天{H8064}"] 這樣的中文字+編號小單元
+                // 💡 1. 精準拆解：把經文拆成 [ "相爱{G25}", "你们{G5210}" ] 這樣帶有編號的晶片單元
                 const tokenPattern = /([^<{GHe\d\s]+(?:[<{ ]*[GH]\d+[a-zA-Z]?[>} ]*)+)|([^<{GHe\d\s]+)/g;
                 let tokens = rawText.match(tokenPattern) || [rawText];
                 let processedLine = "";
 
                 tokens.forEach(token => {
-                    // 1. 提取這個小單元裡面的中文字
+                    // 💡 2. 提取出這個單元裡純粹的中文字（例如從 "相爱{G25}" 中提取出 "相爱"）
                     let chineseChar = token.replace(/[<{ ]*[GH]\d+[a-zA-Z]?[>} ]*/g, '').trim();
                     
-                    // 2. 判斷這個中文字是不是我們要找的關鍵字
-                    if (chineseChar === keyword) {
-                        // 檢查這個單元裡有沒有包含「當前的原文編號」
+                    // 💡 3. 如果這個中文字塊裡面「包含」了我們要找的關鍵字 (如 "相爱" 包含了 "爱")
+                    if (chineseChar.includes(keyword)) {
+                        
+                        // 檢查這個詞組後面黏著的是不是目前這個表格的原文編號
                         if (token.includes(strongId)) {
-                            // 💡 完美契合！染成紅色粗體，並清除編號
-                            processedLine += `<span style="color: red; font-weight: bold;">${chineseChar}</span>`;
+                            // ⭐ 符合當前編號！將詞組裡面的關鍵字精準切換成【紅色】
+                            let coloredWord = chineseChar.split(keyword).join(`<span style="color: red; font-weight: bold;">${keyword}</span>`);
+                            processedLine += coloredWord;
                         } else {
-                            // 💡 雖然字對了，但編號不對！染成普通黃色高亮
-                            processedLine += `<span class="hl">${chineseChar}</span>`;
+                            // ⭐ 雖然包含關鍵字，但編號是別人的！將其標記為【黃色高亮】
+                            let highlightedWord = chineseChar.split(keyword).join(`<span class="hl">${keyword}</span>`);
+                            processedLine += highlightedWord;
                         }
                     } else {
-                        // 3. 不是關鍵字，就直接清洗掉可能存在的其他編號，還原純文字
+                        // 💡 4. 完全不包含關鍵字，直接還原純中文
                         processedLine += chineseChar;
                     }
                 });
 
                 highlightedText = processedLine;
             } else {
-                // 備用防線：如果找不到原始 entry，使用安全普通高亮
                 const safeText = typeof escapeHtml === 'function' ? escapeHtml(v.text) : v.text;
                 highlightedText = safeText.split(keyword).join(`<span class='hl'>${keyword}</span>`);
             }
@@ -229,6 +229,7 @@ function buildSectionsHtml(groups, keyword) {
     });
     return html;
 }
+
 
 
 
