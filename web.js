@@ -93,23 +93,30 @@ function buildSectionsHtml(groups, keyword) {
 // ==========================================
 function getLocalStrongsDefinitionHtml(strongId) {
     if (!strongsDict || !strongsDict[strongId]) return "";
+    
     const item = strongsDict[strongId];
-    let lemma = item.lemma ? `<span class="dict-lemma">${item.lemma}</span>` : "";
-    let pronounce = item.pronunciation ? `<span class="dict-pronounce">/${item.pronunciation}/</span>` : "";
+    
+    // 1. Safely escape and format header pieces to prevent XSS
+    let lemma = item.lemma ? `<span class="dict-lemma">${escapeHtml(item.lemma)}</span>` : "";
+    let pronounce = item.pronunciation ? `<span class="dict-pronounce">/${escapeHtml(item.pronunciation)}/</span>` : "";
+    
+    // 2. Fallback handling for description/definition
     let content = item.description || item.definition || "";
     
+    // 3. Escape before structural manipulation or ensure clean cutoffs
+    content = escapeHtml(content);
     if (content.length > 150) {
         content = content.substring(0, 150) + "...";
     }
-    content = escapeHtml(content);
-
+    
+    // 4. Return the template literal with decoded emoji string
     return `
-      <div class="strongs-tooltip">
-        <div class="tooltip-trigger">ℹ️ 字典</div>
-        <div class="tooltip-content">
-          <div class="dict-header">${strongId} ${lemma} ${pronounce}</div>
-          <div class="dict-body">${content}</div>
+        <div class="strongs-tooltip">
+            <div class="tooltip-trigger">ℹ️ 字典</div>
+            <div class="tooltip-content">
+                <div class="dict-header">${escapeHtml(strongId)} ${lemma} ${pronounce}</div>
+                <div class="dict-body">${content}</div>
+            </div>
         </div>
-      </div>
     `;
 }
