@@ -41,102 +41,101 @@ window.onload = function() {
 // ==========================================
 // 2. 關鍵字搜尋核心業務邏輯
 // ==========================================
-function runSearch() { 
-    let rawKeyword = document.getElementById('keyword').value.trim(); 
-    if (!rawKeyword) return; 
-
+function runSearch() {
+    let rawKeyword = document.getElementById('keyword').value.trim();
+    if (!rawKeyword) return;
     if (bibleData.length === 0 || bibleSimpData.length === 0) {
-        alert("資料庫尚未加載完成。"); 
-        return; 
-    } 
-
+        alert("資料庫尚未加載完成。");
+        return;
+    }
     const selectedBookFilter = document.getElementById('book-filter') ? document.getElementById('book-filter').value : 'all';
-
     let tradKeyword = rawKeyword;
     let simpKeyword = rawKeyword;
-
     if (typeof s2t_t2s === 'object') {
-        if (typeof s2t_t2s.s2t === 'function') tradKeyword = s2t_t2s.s2t(rawKeyword); 
-        if (typeof s2t_t2s.t2s === 'function') simpKeyword = s2t_t2s.t2s(rawKeyword); 
+        if (typeof s2t_t2s.s2t === 'function') tradKeyword = s2t_t2s.s2t(rawKeyword);
+        if (typeof s2t_t2s.t2s === 'function') simpKeyword = s2t_t2s.t2s(rawKeyword);
     }
-
     let isSimplified = false;
     if (/[爱创造圣经国门们时后会种样里个乐]/g.test(rawKeyword) || tradKeyword !== rawKeyword) {
         isSimplified = true;
     }
-
     const currentBibleDatabase = isSimplified ? bibleSimpData : bibleData;
+    document.getElementById('status').innerText = "搜尋中...";
 
-    document.getElementById('status').innerText = "搜尋中..."; 
-    let otGroups = {}; 
-    let ntGroups = {}; 
-    let otTotalVerses = 0; 
-    let ntTotalVerses = 0; 
+    // 【優化】動態建立本次搜尋適用的書名對照表，解決簡體模式下書名仍顯示繁體的 Bug
+    const currentBookMap = {};
+    for (const [id, tradName] of Object.entries(BOOK_MAP)) {
+        if (isSimplified && typeof s2t_t2s === 'object' && typeof s2t_t2s.t2s === 'function') {
+            currentBookMap[id] = s2t_t2s.t2s(tradName);
+        } else {
+            currentBookMap[id] = tradName;
+        }
+    }
 
-    currentBibleDatabase.forEach(entry => { 
-        const bookId = parseInt(entry.book, 10); 
+    let otGroups = {};
+    let ntGroups = {};
+    let otTotalVerses = 0;
+    let ntTotalVerses = 0;
 
-        // 【書卷過濾攔截器】支援空、範圍、單本
+    currentBibleDatabase.forEach(entry => {
+        const bookId = parseInt(entry.book, 10);
         if (selectedBookFilter !== 'all') {
             if (selectedBookFilter === 'ot_all' && bookId > 39) return;
             if (selectedBookFilter === 'nt_all' && bookId <= 39) return;
             if (selectedBookFilter !== 'ot_all' && selectedBookFilter !== 'nt_all' && bookId !== parseInt(selectedBookFilter, 10)) return;
         }
-
-        const rawText = entry.text || ""; 
-        const cleanText = cleanStrongs(rawText); 
-        
+        const rawText = entry.text || "";
+        const cleanText = cleanStrongs(rawText);
         let matchedKeyword = "";
         if (cleanText.includes(simpKeyword)) {
             matchedKeyword = simpKeyword;
         } else if (cleanText.includes(tradKeyword)) {
             matchedKeyword = tradKeyword;
         } else {
-            return; 
+            return;
         }
-
         let strongIds = [];
         const fallbackPattern = /[GH]\d+[a-zA-Z]?/g;
         const allMatches = rawText.match(fallbackPattern);
         if (allMatches) {
             strongIds = [...new Set(allMatches)];
         }
+        if (strongIds.length === 0) return;
 
-        if (strongIds.length === 0) return; 
+        // 【核心修改】將原始帶有標籤的 rawText 一併打包傳入
+        const verseData = {
+            book_id: bookId,
+            book_name: currentBookMap[bookId] || `未知(${bookId})`,
+            chapter: entry.chapter,
+            verse: entry.verse,
+            rawText: rawText, // 👈 保留標籤文字供精準高亮使用
+            text: cleanText
+        };
 
-        const verseData = { 
-            book_id: bookId, 
-            book_name: BOOK_MAP[bookId] || `未知(${bookId})`, 
-            chapter: entry.chapter, 
-            verse: entry.verse, 
-            text: cleanText 
-        }; 
+        strongIds.forEach(strongId => {
+            if (bookId <= 39) {
+                if (!otGroups[strongId]) otGroups[strongId] = [];
+                otGroups[strongId].push({...verseData});
+                otTotalVerses++;
+            } else {
+                if (!ntGroups[strongId]) ntGroups[strongId] = [];
+                ntGroups[strongId].push({...verseData});
+                ntTotalVerses++;
+            }
+        });
+    });
 
-        strongIds.forEach(strongId => { 
-            if (bookId <= 39) { 
-                if (!otGroups[strongId]) otGroups[strongId] = []; 
-                otGroups[strongId].push({...verseData}); 
-                otTotalVerses++; 
-            } else { 
-                if (!ntGroups[strongId]) ntGroups[strongId] = []; 
-                ntGroups[strongId].push({...verseData}); 
-                ntTotalVerses++; 
-            } 
-        }); 
-    }); 
+    document.getElementById('ot-count').innerText = `（找到 ${otTotalVerses} 筆）`;
+    document.getElementById('nt-count').innerText = `（找到 ${ntTotalVerses} 筆）`;
 
-    document.getElementById('ot-count').innerText = `（找到 ${otTotalVerses} 筆）`; 
-    document.getElementById('nt-count').innerText = `（找到 ${ntTotalVerses} 筆）`; 
-
-    const renderKeyword = isSimplified ? simpKeyword : tradKeyword;
-
-    const otHtml = Object.keys(otGroups).length ? buildSectionsHtml(otGroups, renderKeyword) : "<p class='no-result'>無結果</p>"; 
-    const ntHtml = Object.keys(ntGroups).length ? buildSectionsHtml(ntGroups, renderKeyword) : "<p class='no-result'>無結果</p>"; 
+    // 👈 注意：這裡改為傳遞 isSimplified 狀態，不再盲目傳遞中文關鍵字
+    const otHtml = Object.keys(otGroups).length ? buildSectionsHtml(otGroups, isSimplified) : "<p class='no-result'>無結果</p>";
+    const ntHtml = Object.keys(ntGroups).length ? buildSectionsHtml(ntGroups, isSimplified) : "<p class='no-result'>無結果</p>";
 
     document.getElementById('ot-results').innerHTML = otHtml;
     document.getElementById('nt-results').innerHTML = ntHtml;
-    document.getElementById('results-area').style.display = 'block'; 
-    document.getElementById('status').innerText = "搜尋完畢！"; 
+    document.getElementById('results-area').style.display = 'block';
+    document.getElementById('status').innerText = "搜尋完畢！";
 }
 
 // ==========================================
