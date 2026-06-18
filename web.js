@@ -96,31 +96,52 @@ function buildSectionsHtml(groups, keyword, isSimplifiedMode) {
 // ==========================================
 // 2. 獲取本地辭典定義 HTML
 // ==========================================
+// ========================================== //
+// 2. 獲取本地辭典定義 HTML （已修復純文字結構相容性）
+// ========================================== //
 function getLocalStrongsDefinitionHtml(strongId) {
-    if (!strongsDict || !strongsDict[strongId]) return "";
+    // 兼容跨文件调用：如果 main.js 里的变量名是 strongsDict，而当前作用域找不到，尝试去 window 找
+    const dict = typeof strongsDict !== 'undefined' ? strongsDict : window.strongsDict;
     
-    const item = strongsDict[strongId];
+    if (!dict || !dict[strongId]) return "";
+
+    // 拿到原始的純文字字串
+    const rawText = dict[strongId]; 
     
-    // 1. Safely escape and format header pieces to prevent XSS
-    let lemma = item.lemma ? `<span class="dict-lemma">${escapeHtml(item.lemma)}</span>` : "";
-    let pronounce = item.pronunciation ? `<span class="dict-pronounce">/${escapeHtml(item.pronunciation)}/</span>` : "";
-    
-    // 2. Fallback handling for description/definition
-    let content = item.description || item.definition || "";
-    
-    // 3. Escape before structural manipulation or ensure clean cutoffs
-    content = escapeHtml(content);
-    if (content.length > 150) {
-        content = content.substring(0, 150) + "...";
+    let lemma = "";
+    let content = rawText;
+
+    // 安全處理：確保有些環境下有自訂的 escapeHtml 函數
+    const safeEscape = typeof escapeHtml === 'function' ? escapeHtml : function(str) {
+        return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+    };
+
+    // 🎯 核心解析邏輯：將 "Α | 意義: ..." 用「|」切開
+    if (rawText.includes('|')) {
+        const parts = rawText.split('|');
+        lemma = `<span class="dict-lemma" style="color: #4a90e2; font-weight: bold; margin-left: 5px;">${safeEscape(parts[0].trim())}</span>`;
+        content = parts.slice(1).join('|').trim(); // 剩下一整段都是定義
     }
-    
-    // 4. Return the template literal with decoded emoji string
+
+    // 將字串中的 \n 換行符號轉為網頁的 <br> 標籤
+    let formattedContent = safeEscape(content).replace(/\n/g, '<br>');
+
+    // 字數太長時做截斷（保留 150 字），避免彈窗撐爆
+    if (formattedContent.length > 150) {
+        formattedContent = formattedContent.substring(0, 150) + "...";
+    }
+
+    // 返回渲染的 HTML 結構（帶有簡單的樣式，滑鼠移上去或點擊可以查看全貌）
     return `
-        <div class="strongs-tooltip">
-            <div class="tooltip-trigger">ℹ️ 字典</div>
-            <div class="tooltip-content">
-                <div class="dict-header">${escapeHtml(strongId)} ${lemma} ${pronounce}</div>
-                <div class="dict-body">${content}</div>
+        <div class="strongs-tooltip" style="display: inline-block; margin-left: 10px; position: relative; font-size: 14px;">
+            <span class="tooltip-trigger" style="cursor: pointer; background: #eef2f7; padding: 2px 6px; border-radius: 4px; color: #555; border: 1px solid #ddd;">ℹ️ 字典定義</span>
+            <div class="tooltip-content" style="display: none; position: absolute; left: 0; top: 25px; background: white; border: 1px solid #ccc; padding: 10px; width: 320px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); z-index: 999; border-radius: 6px; font-weight: normal; color: #333; text-align: left; line-height: 1.4;">
+                <div class="dict-header" style="border-bottom: 1px solid #eee; padding-bottom: 5px; margin-bottom: 5px; font-weight: bold; color: #000;">
+                    ${safeEscape(strongId)} ${lemma}
+                </div>
+                <div class="dict-body" style="max-height: 200px; overflow-y: auto; font-size: 13px;">
+                    ${formattedContent}
+                </div>
             </div>
         </div>
     `;
