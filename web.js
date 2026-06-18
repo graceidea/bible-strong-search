@@ -32,6 +32,7 @@ function buildSectionsHtml(groups, keyword, isSimplifiedMode) {
         `;
 
         verses.forEach(v => {
+            // 保留你原有的設計：對齊簡繁體資料庫
             const currentDb = isSimplifiedMode ? bibleSimpData : bibleData;
             
             const originalEntry = currentDb.find(s => 
@@ -45,52 +46,34 @@ function buildSectionsHtml(groups, keyword, isSimplifiedMode) {
             if (originalEntry && originalEntry.text) {
                 let rawText = originalEntry.text;
 
-                // 保留你原有的設計：巨觀拆解正則
-                const tokenPattern = /([^\w{}<>]+(?:[<{ ]*[GH]\d+[a-zA-Z]?[>} ]*)+)|([^\w{}<>]+|[^ \u4e00-\u9fa5\w{}<>]+)/g;
-                let tokens = rawText.match(tokenPattern) || [rawText];
-                let processedLine = "";
+                // ⭐【前置全局大掃除】先拔掉最開頭與最結尾殘留的無效大括號
+                rawText = rawText.replace(/^[<{ ]*[GH]\d+[a-zA-Z]?[>} ]*/g, ''); 
+                rawText = rawText.replace(/^[<>{}[\]\s]+/g, ''); 
 
-                tokens.forEach(token => {
-                    // 提取純中文與符號
-                    let chineseChar = token.replace(/[<{ ]*[GH]\d+[a-zA-Z]?[>} ]*/g, '');
-                    chineseChar = chineseChar.replace(/[<>{}[\]]/g, '').trim();
+                // 轉義 strongId 以便安全放入正則表達式
+                const escapedStrong = strongId.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
 
-                    if (chineseChar && chineseChar.includes(keyword)) {
-                        
-                        // ⭐【終極微觀二次切片演算法】
-                        // 不再對整個 token 進行暴力的 split().join()。
-                        // 我們把這個 token 裡面的每一個字單獨拆開處理，精準隔離！
-                        let charArray = chineseChar.split("");
-                        let reassembledToken = "";
-
-                        charArray.forEach(char => {
-                            if (char === keyword) {
-                                // 針對這「單一個字」，建立極度嚴格的雷達正則檢查：
-                                // 檢查在這個 token 裡面，這個字後面是不是緊跟著目前的 strongId
-                                const escapedStrong = strongId.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
-                                const strictCheckPattern = new RegExp(char + `[<{ ]*` + escapedStrong, "i");
-
-                                if (strictCheckPattern.test(token)) {
-                                    // 🎯 只有這個字後面黏著當前編號，才變紅！
-                                    reassembledToken += `<span style="color: red; font-weight: bold;">${char}</span>`;
-                                } else {
-                                    // 🟡 雖然是同一個字，但後面黏的是別人的編號，退回黃色！
-                                    reassembledToken += `<span class="hl">${char}</span>`;
-                                }
-                            } else {
-                                // 不是關鍵字（例如“你”、“我”），原樣接回去
-                                reassembledToken += char;
-                            }
-                        });
-
-                        processedLine += reassembledToken;
-                    } else {
-                        // 標點符號與其餘文字原封不動拼回，保證不丟失標點
-                        processedLine += chineseChar;
-                    }
+                // ⭐【三大防線：流線型動態染色演算法】
+                // 1. 先把「中文字+目前的編號」抓出來，將裡面的關鍵字精準染紅
+                //    例如：(你爱){G25} -> 把 "爱" 換成紅色的 "爱"
+                const redRegex = new RegExp(`([^\\s<{}>]+)(?=[<{ ]*${escapedStrong}[>} ]*)`, "gi");
+                rawText = rawText.replace(redRegex, (match) => {
+                    return match.split(keyword).join(`<span style="color: red; font-weight: bold;">${keyword}</span>`);
                 });
 
-                highlightedText = processedLine;
+                // 2. 再把「中文字+其他任何編號」抓出來，將裡面的關鍵字染黃
+                //    例如：(我爱){G5368} -> 把 "爱" 換成黃色的 "爱"
+                const yellowRegex = /([^\s<{}>]+)(?=[<{ ]*[GH]\d+[a-zA-Z]?[>} ]*)/gi;
+                rawText = rawText.replace(yellowRegex, (match) => {
+                    return match.split(keyword).join(`<span class="hl">${keyword}</span>`);
+                });
+
+                // 3. 最後一步：把經文裡所有剩餘的原文編號如 {G25}、{G5368} 通通徹底洗掉
+                //    這能完美保住你所有的標點符號、英文、中文字和括號註解！
+                rawText = rawText.replace(/[<{ ]*[GH]\d+[a-zA-Z]?[>} ]*/g, '');
+                rawText = rawText.replace(/[<>{}[\]]/g, '');
+
+                highlightedText = rawText;
             } else {
                 const safeText = typeof escapeHtml === 'function' ? escapeHtml(v.text) : v.text;
                 highlightedText = safeText.split(keyword).join(`<span class='hl'>${keyword}</span>`);
@@ -110,6 +93,7 @@ function buildSectionsHtml(groups, keyword, isSimplifiedMode) {
 
     return html;
 }
+
 
                 
 // ==========================================
