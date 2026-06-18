@@ -32,7 +32,7 @@ function buildSectionsHtml(groups, keyword, isSimplifiedMode) {
         `;
 
         verses.forEach(v => {
-            // 🎯【修復】直接使用從 main.js 傳過來的簡繁體狀態，精確對齊資料庫
+            // ✅ 保留你原有的設計：直接使用 main.js 傳過來的簡繁體狀態
             const currentDb = isSimplifiedMode ? bibleSimpData : bibleData;
             
             const originalEntry = currentDb.find(s => 
@@ -46,7 +46,7 @@ function buildSectionsHtml(groups, keyword, isSimplifiedMode) {
             if (originalEntry && originalEntry.text) {
                 let rawText = originalEntry.text;
 
-                // 🎯【修復】支援萬國碼（包含標點符號、跨年齡註解）的字串晶片拆解正則表達式
+                // ✅ 保留你原有的設計：能精準保留標點符號與特殊註解的正則拆解
                 const tokenPattern = /([^\w{}<>]+(?:[<{ ]*[GH]\d+[a-zA-Z]?[>} ]*)+)|([^\w{}<>]+|[^ \u4e00-\u9fa5\w{}<>]+)/g;
                 let tokens = rawText.match(tokenPattern) || [rawText];
                 let processedLine = "";
@@ -57,8 +57,15 @@ function buildSectionsHtml(groups, keyword, isSimplifiedMode) {
                     chineseChar = chineseChar.replace(/[<>{}[\]]/g, '').trim();
 
                     if (chineseChar && chineseChar.includes(keyword)) {
-                        // 驗證這個字片組裡面，是否包含我們當前正在查看的原文編號
-                        if (token.toUpperCase().includes(strongId.toUpperCase())) {
+                        
+                        // ⭐【超精準升級：只改這裡】
+                        // 原本的條件：if (token.toUpperCase().includes(strongId.toUpperCase()))
+                        // 它太寬鬆，會被隔壁同名詞組污染。
+                        // 現代新條件：利用嚴格正則，檢查在這個晶片(token)裡，關鍵字(如"爱")後面是不是「緊跟著」當前的原文編號。
+                        const escapedStrong = strongId.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+                        const strictCheckPattern = new RegExp(keyword + `[<{ ]*` + escapedStrong, "i");
+
+                        if (strictCheckPattern.test(token)) {
                             // 🎯 完美符合目前編號：字組內的關鍵字精準染成【紅色粗體】
                             let coloredWord = chineseChar.split(keyword).join(`<span style="color: red; font-weight: bold;">${keyword}</span>`);
                             processedLine += coloredWord;
@@ -68,6 +75,7 @@ function buildSectionsHtml(groups, keyword, isSimplifiedMode) {
                             processedLine += highlightedWord;
                         }
                     } else {
+                        // ✅ 保留你原有的設計：標點符號與其餘文字原封不動拼回，不丟失經文完整性
                         processedLine += chineseChar;
                     }
                 });
@@ -93,6 +101,7 @@ function buildSectionsHtml(groups, keyword, isSimplifiedMode) {
     return html;
 }
 
+                
 // ==========================================
 // 2. 獲取本地辭典定義 HTML
 // ==========================================
