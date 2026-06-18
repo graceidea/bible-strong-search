@@ -62,7 +62,7 @@ function runSearch() {
     const currentBibleDatabase = isSimplified ? bibleSimpData : bibleData;
     document.getElementById('status').innerText = "搜尋中...";
 
-    // 【優化】動態建立本次搜尋適用的書名對照表，解決簡體模式下書名仍顯示繁體的 Bug
+    // 動態建立書名對照表，解決簡體模式下書名顯示繁體的 Bug
     const currentBookMap = {};
     for (const [id, tradName] of Object.entries(BOOK_MAP)) {
         if (isSimplified && typeof s2t_t2s === 'object' && typeof s2t_t2s.t2s === 'function') {
@@ -102,13 +102,11 @@ function runSearch() {
         }
         if (strongIds.length === 0) return;
 
-        // 【核心修改】將原始帶有標籤的 rawText 一併打包傳入
         const verseData = {
             book_id: bookId,
             book_name: currentBookMap[bookId] || `未知(${bookId})`,
             chapter: entry.chapter,
             verse: entry.verse,
-            rawText: rawText, // 👈 保留標籤文字供精準高亮使用
             text: cleanText
         };
 
@@ -128,15 +126,18 @@ function runSearch() {
     document.getElementById('ot-count').innerText = `（找到 ${otTotalVerses} 筆）`;
     document.getElementById('nt-count').innerText = `（找到 ${ntTotalVerses} 筆）`;
 
-    // 👈 注意：這裡改為傳遞 isSimplified 狀態，不再盲目傳遞中文關鍵字
-    const otHtml = Object.keys(otGroups).length ? buildSectionsHtml(otGroups, isSimplified) : "<p class='no-result'>無結果</p>";
-    const ntHtml = Object.keys(ntGroups).length ? buildSectionsHtml(ntGroups, isSimplified) : "<p class='no-result'>無結果</p>";
+    const renderKeyword = isSimplified ? simpKeyword : tradKeyword;
+
+    // 🎯 這裡把 isSimplified（是否為簡體）當作第三個參數直接傳給 web.js
+    const otHtml = Object.keys(otGroups).length ? buildSectionsHtml(otGroups, renderKeyword, isSimplified) : "<p class='no-result'>無結果</p>";
+    const ntHtml = Object.keys(ntGroups).length ? buildSectionsHtml(ntGroups, renderKeyword, isSimplified) : "<p class='no-result'>無結果</p>";
 
     document.getElementById('ot-results').innerHTML = otHtml;
     document.getElementById('nt-results').innerHTML = ntHtml;
     document.getElementById('results-area').style.display = 'block';
     document.getElementById('status').innerText = "搜尋完畢！";
 }
+
 
 // ==========================================
 // 3. 頁籤切換功能
