@@ -1,9 +1,6 @@
 // ==========================================
 // 1. 生成表格 HTML 與精準編號染色邏輯
 // ==========================================
-// ==========================================
-// 1. 生成表格 HTML 與精準編號染色邏輯
-// ==========================================
 function buildSectionsHtml(groups, keyword, isSimplifiedMode) {
     let html = "";
     const sortedKeys = Object.keys(groups).sort(sortStrongIds);
