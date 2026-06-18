@@ -32,7 +32,6 @@ function buildSectionsHtml(groups, keyword, isSimplifiedMode) {
         `;
 
         verses.forEach(v => {
-            // ✅ 保留你原有的設計：直接使用 main.js 傳過來的簡繁體狀態
             const currentDb = isSimplifiedMode ? bibleSimpData : bibleData;
             
             const originalEntry = currentDb.find(s => 
@@ -46,36 +45,47 @@ function buildSectionsHtml(groups, keyword, isSimplifiedMode) {
             if (originalEntry && originalEntry.text) {
                 let rawText = originalEntry.text;
 
-                // ✅ 保留你原有的設計：能精準保留標點符號與特殊註解的正則拆解
+                // 保留你原有的設計：巨觀拆解正則
                 const tokenPattern = /([^\w{}<>]+(?:[<{ ]*[GH]\d+[a-zA-Z]?[>} ]*)+)|([^\w{}<>]+|[^ \u4e00-\u9fa5\w{}<>]+)/g;
                 let tokens = rawText.match(tokenPattern) || [rawText];
                 let processedLine = "";
 
                 tokens.forEach(token => {
-                    // 提取純中文字
+                    // 提取純中文與符號
                     let chineseChar = token.replace(/[<{ ]*[GH]\d+[a-zA-Z]?[>} ]*/g, '');
                     chineseChar = chineseChar.replace(/[<>{}[\]]/g, '').trim();
 
                     if (chineseChar && chineseChar.includes(keyword)) {
                         
-                        // ⭐【超精準升級：只改這裡】
-                        // 原本的條件：if (token.toUpperCase().includes(strongId.toUpperCase()))
-                        // 它太寬鬆，會被隔壁同名詞組污染。
-                        // 現代新條件：利用嚴格正則，檢查在這個晶片(token)裡，關鍵字(如"爱")後面是不是「緊跟著」當前的原文編號。
-                        const escapedStrong = strongId.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
-                        const strictCheckPattern = new RegExp(keyword + `[<{ ]*` + escapedStrong, "i");
+                        // ⭐【終極微觀二次切片演算法】
+                        // 不再對整個 token 進行暴力的 split().join()。
+                        // 我們把這個 token 裡面的每一個字單獨拆開處理，精準隔離！
+                        let charArray = chineseChar.split("");
+                        let reassembledToken = "";
 
-                        if (strictCheckPattern.test(token)) {
-                            // 🎯 完美符合目前編號：字組內的關鍵字精準染成【紅色粗體】
-                            let coloredWord = chineseChar.split(keyword).join(`<span style="color: red; font-weight: bold;">${keyword}</span>`);
-                            processedLine += coloredWord;
-                        } else {
-                            // ⚠️ 編號是別人的：標記為【黃色常規高亮】
-                            let highlightedWord = chineseChar.split(keyword).join(`<span class="hl">${keyword}</span>`);
-                            processedLine += highlightedWord;
-                        }
+                        charArray.forEach(char => {
+                            if (char === keyword) {
+                                // 針對這「單一個字」，建立極度嚴格的雷達正則檢查：
+                                // 檢查在這個 token 裡面，這個字後面是不是緊跟著目前的 strongId
+                                const escapedStrong = strongId.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+                                const strictCheckPattern = new RegExp(char + `[<{ ]*` + escapedStrong, "i");
+
+                                if (strictCheckPattern.test(token)) {
+                                    // 🎯 只有這個字後面黏著當前編號，才變紅！
+                                    reassembledToken += `<span style="color: red; font-weight: bold;">${char}</span>`;
+                                } else {
+                                    // 🟡 雖然是同一個字，但後面黏的是別人的編號，退回黃色！
+                                    reassembledToken += `<span class="hl">${char}</span>`;
+                                }
+                            } else {
+                                // 不是關鍵字（例如“你”、“我”），原樣接回去
+                                reassembledToken += char;
+                            }
+                        });
+
+                        processedLine += reassembledToken;
                     } else {
-                        // ✅ 保留你原有的設計：標點符號與其餘文字原封不動拼回，不丟失經文完整性
+                        // 標點符號與其餘文字原封不動拼回，保證不丟失標點
                         processedLine += chineseChar;
                     }
                 });
