@@ -5,6 +5,22 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>聖經原文多功能查詢系統</title>
     <link rel="stylesheet" href="style.css">
+    
+    <!-- 🎯 補上 CSS 樣式：確保滑鼠移到「ℹ️ 字典定義」時能正常跳出彈窗 -->
+    <style>
+        .strongs-tooltip {
+            position: relative;
+            display: inline-block;
+        }
+        /* 預設隱藏彈窗 */
+        .strongs-tooltip .tooltip-content {
+            display: none !important;
+        }
+        /* 滑鼠懸浮（Hover）時顯示彈窗 */
+        .strongs-tooltip:hover .tooltip-content {
+            display: block !important;
+        }
+    </style>
 </head>
 <body>
 
@@ -19,11 +35,10 @@
         <div id="panel-keyword" class="search-panel active">
             <input type="text" id="keyword" placeholder="請輸入中文關鍵字（支援簡繁自動轉換，如：光、忍耐）" onkeyup="if(event.key==='Enter') runSearch()">
             
-            <!-- 💡 【新增】書卷過濾下拉選單（JavaScript 會在 window.onload 時自動把 66 卷書塞進這裡） -->
+            <!-- 💡 書卷過濾下拉選單（JavaScript 會在 window.onload 時自動把 66 卷書塞進這裡） -->
             <select id="book-filter" style="padding: 10px; font-size: 16px; border: 1px solid #ccc; border-radius: 4px; outline: none; background: #fff; cursor: pointer;">
                 <option value="all">🔍 所有書卷（全部）</option>
             </select>
-
             <button onclick="runSearch()">搜尋</button>
         </div>
 
@@ -39,19 +54,19 @@
     <div id="results-area" style="display: none;">
         <div class="testament-header" style="background:#8e44ad;">📖 舊約部分 <span id="ot-count" class="count-badge"></span></div>
         <div id="ot-results"><p class="no-result">無結果</p></div>
-        
+
         <div class="testament-header" style="background:#2980b9;">📖 新約部分 <span id="nt-count" class="count-badge"></span></div>
         <div id="nt-results"><p class="no-result">無結果</p></div>
     </div>
-    <script src="https://cdn.jsdelivr.net/npm/s2t-t2s@1.0.3/dist/s2t-t2s.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/s2t-t2s@1.0.3/dist/s2t-t2s.min.js"></script>
-    
-    <script src="config.js"></script>   
-    <script src="tools.js"></script>    
-    <script src="web.js"></script> 
-    <script src="main.js"></script> 
 
+    <!-- 🎯 優化點 1：刪除了原本重複引入兩次的 s2t-t2s 簡繁轉換工具，保留一個即可 -->
+    <script src="https://cdn.jsdelivr.net/npm/s2t-t2s@1.0.3/dist/s2t-t2s.min.js"></script>
     
+    <script src="config.js"></script>
+    <script src="tools.js"></script>
+    <script src="web.js"></script>
+    <script src="main.js"></script>
+
     <!-- 
     备忘录：已加载的脚本功能说明
 
@@ -79,7 +94,6 @@
     4. 原文反查留空
        - function runReverseSearch()
     -->
-
 
 </body>
 </html>
