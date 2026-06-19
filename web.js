@@ -58,8 +58,8 @@ function buildSectionsHtml(groups, keyword, isSimplifiedMode) {
 
                     if (hasStrong) {
                         
-                        // 🎯【純字串過濾法】：用取代法把 { } 或 < > 與空格全剝掉，確保 100% 拿到純編號字串！
-                        const tokenStrongId = token.replace(/[^\w]/g, '').toUpperCase();
+                        // 🎯【安全修復】：純字串清洗，剔除所有非英文、非數字字元，取得極度安全的 StrongId 字串
+                        const tokenStrongId = token.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
                         
                         // 提取純文字部分 (例如: "你爱")
                         let chineseChar = token.replace(/[{<][GH]\d+[a-zA-Z]?[>}]/gi, '').trim();
@@ -104,6 +104,48 @@ function buildSectionsHtml(groups, keyword, isSimplifiedMode) {
     });
 
     return html;
+}
+
+// ==========================================
+// 2. 獲取本地辭典定義 HTML
+// ==========================================
+function getLocalStrongsDefinitionHtml(strongId) {
+    const dict = typeof strongsDict !== 'undefined' ? strongsDict : window.strongsDict;
+    if (!dict || !dict[strongId]) return "";
+
+    const rawText = dict[strongId]; 
+    let lemma = "";
+    let content = rawText;
+
+    const safeEscape = typeof escapeHtml === 'function' ? escapeHtml : function(str) {
+        return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+    };
+
+    if (rawText.includes('|')) {
+        const parts = rawText.split('|');
+        lemma = `<span class="dict-lemma" style="color: #4a90e2; font-weight: bold; margin-left: 5px;">${safeEscape(parts[0].trim())}</span>`;
+        content = parts.slice(1).join('|').trim();
+    }
+
+    let formattedContent = safeEscape(content).replace(/\n/g, '<br>');
+
+    if (formattedContent.length > 150) {
+        formattedContent = formattedContent.substring(0, 150) + "...";
+    }
+
+    return `
+        <div class="strongs-tooltip" style="display: inline-block; margin-left: 10px; position: relative; font-size: 14px;">
+            <span class="tooltip-trigger" style="cursor: pointer; background: #eef2f7; padding: 2px 6px; border-radius: 4px; color: #555; border: 1px solid #ddd;">ℹ️ 字典定義</span>
+            <div class="tooltip-content" style="display: none; position: absolute; left: 0; top: 25px; background: white; border: 1px solid #ccc; padding: 10px; width: 320px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); z-index: 999; border-radius: 6px; font-weight: normal; color: #333; text-align: left; line-height: 1.4;">
+                <div class="dict-header" style="border-bottom: 1px solid #eee; padding-bottom: 5px; margin-bottom: 5px; font-weight: bold; color: #000;">
+                    ${safeEscape(strongId)} ${lemma}
+                </div>
+                <div class="dict-body" style="max-height: 200px; overflow-y: auto; font-size: 13px;">
+                    ${formattedContent}
+                </div>
+            </div>
+        </div>
+    `;
 }
 
 
