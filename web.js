@@ -57,9 +57,9 @@ function buildSectionsHtml(groups, keyword, isSimplifiedMode) {
                     const hasStrong = /[{<][GH]\d+[a-zA-Z]?[>}]/i.test(token);
 
                     if (hasStrong) {
-                        // 🎯【徹底修復點】：先取出 match 陣列中索引為 1 的純字串元素，再轉大寫
-                        const strongMatch = token.match(/[{<]([GH]\d+[a-zA-Z]?)[>}]/i);
-                        const tokenStrongId = (strongMatch && strongMatch[1]) ? strongMatch[1].toUpperCase() : "";
+                        
+                        // 🎯【純字串過濾法】：用取代法把 { } 或 < > 與空格全剝掉，確保 100% 拿到純編號字串！
+                        const tokenStrongId = token.replace(/[^\w]/g, '').toUpperCase();
                         
                         // 提取純文字部分 (例如: "你爱")
                         let chineseChar = token.replace(/[{<][GH]\d+[a-zA-Z]?[>}]/gi, '').trim();
@@ -105,6 +105,7 @@ function buildSectionsHtml(groups, keyword, isSimplifiedMode) {
 
     return html;
 }
+
 
 // ========================================== //
 // 2. 獲取本地辭典定義 HTML （已修復純文字結構相容性）
