@@ -2,7 +2,7 @@
 // 1. 生成表格 HTML 與精準編號染色邏輯
 // ==========================================
 // ==========================================
-// 1. 生成表格 HTML 與精準編號染色邏輯（包含完整偵錯輸出）
+// 1. 生成表格 HTML 與精準編號染色邏輯（多編號共存與全文字保護版）
 // ==========================================
 function buildSectionsHtml(groups, keyword, isSimplifiedMode) {
     let html = "";
@@ -35,7 +35,6 @@ function buildSectionsHtml(groups, keyword, isSimplifiedMode) {
         `;
 
         verses.forEach(v => {
-            // 1. 沿用原有的簡繁體資料庫對齊
             const currentDb = isSimplifiedMode ? bibleSimpData : bibleData;
             
             const originalEntry = currentDb.find(s => 
@@ -49,62 +48,46 @@ function buildSectionsHtml(groups, keyword, isSimplifiedMode) {
             if (originalEntry && originalEntry.text) {
                 let rawText = originalEntry.text;
 
-                // 🎯【偵錯點 1】：觀察資料庫撈出來的原始經文格式與目標 StrongId
-                console.log(`%c[經文原始內容] ${v.book_name} ${v.chapter}:${v.verse}`, "background: #222; color: #bada55; padding: 2px 5px;");
-                console.log("👉 原始文字內容:", JSON.stringify(rawText));
-                console.log("👉 目前處理的 StrongId 區塊:", JSON.stringify(strongId));
-
-                // 🎯【切片正則】：精準切出「中文組+編號」或「純標點符號與空白」
-                const tokenPattern = /([\u4e00-\u9fa5\w]+(?:[<{ ]*[GH]\d+[a-zA-Z]?[>} ]*)+)|([^\u4e00-\u9fa5\w<>{}]+)/g;
+                // 🎯【全新萬能切片正則】：精準切出「文字{編號}」或「純中文字/純符號/純數字」，100% 不吞字
+                const tokenPattern = /([^\s{}<>]+[{<][GH]\d+[a-zA-Z]?[>}])|([^{}<>]+)|([{}<>])/g;
                 let tokens = rawText.match(tokenPattern) || [rawText];
                 
-                // 🎯【偵錯點 2】：觀察切片後的陣列成果，看兩個愛字有沒有被成功拆到不同盒子
-                console.log("👉 切片後的 Tokens 陣列:", JSON.stringify(tokens));
-
                 let processedLine = "";
 
-                tokens.forEach((token, index) => {
-                    const hasStrong = /[<{ ]*[GH]\d+[a-zA-Z]?[>} ]*/i.test(token);
+                tokens.forEach((token) => {
+                    // 檢查這是不是一個帶有原文編號的組合盒子 (例如: "你爱{G25}")
+                    const hasStrong = /[{<][GH]\d+[a-zA-Z]?[>}]/i.test(token);
 
                     if (hasStrong) {
-                        // 提取純中文字
-                        let chineseChar = token.replace(/[<{ ]*[GH]\d+[a-zA-Z]?[>} ]*/g, '')
-                                               .replace(/[<>{}[\]]/g, '').trim();
+                        // 提取編號本身 (例如: "G25")
+                        const strongMatch = token.match(/[{<]([GH]\d+[a-zA-Z]?)[>}]/i);
+                        const tokenStrongId = strongMatch ? strongMatch.toUpperCase() : "";
+                        
+                        // 提取純文字部分 (例如: "你爱")
+                        let chineseChar = token.replace(/[{<][GH]\d+[a-zA-Z]?[>}]/gi, '').trim();
 
                         if (chineseChar && chineseChar.includes(keyword)) {
-                            // ⭐【精準比對】：檢查當前 strongId 是否出現在這個 token 的尾巴
-                            const escapedStrong = strongId.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
-                            const endWithStrongRegex = new RegExp(`[<{ ]*${escapedStrong}[>} ]*$`, "i");
-
-                            // 🎯【偵錯點 3】：觀察每一個包含關鍵字的 Token 判定過程
-                            const isMatch = endWithStrongRegex.test(token.trim());
-                            console.log(`  [Token #${index}] 檢查字組: ${JSON.stringify(token)}`);
-                            console.log(`    - 純中文字: "${chineseChar}" (包含關鍵字 "${keyword}")`);
-                            console.log(`    - 測試正則: ${endWithStrongRegex.toString()}`);
-                            console.log(`    - 🔥 比對結果:`, isMatch ? "%cTRUE (染紅)" : "%cFALSE (染黃)", isMatch ? "color: red; font-weight: bold;" : "color: orange;");
-
-                            if (isMatch) {
-                                // 🎯 目前編號的關鍵字：紅色粗體
+                            // 🎯 根據編號決定顏色，不再盲目染黃
+                            if (tokenStrongId === strongId.trim().toUpperCase()) {
+                                // 這個盒子的編號剛好是當前區塊的編號 ➡️ 紅色粗體
                                 let coloredWord = chineseChar.split(keyword).join(`<span style="color: red; font-weight: bold;">${keyword}</span>`);
                                 processedLine += coloredWord;
                             } else {
-                                // ⚠️ 別人編號的關鍵字：黃色常規高亮
+                                // 這個盒子雖然包含關鍵字，但它是別人的編號 ➡️ 黃色高亮
                                 let highlightedWord = chineseChar.split(keyword).join(`<span class="hl">${keyword}</span>`);
                                 processedLine += highlightedWord;
                             }
                         } else {
-                            // 雖然帶有編號，但不含關鍵字，直接輸出純文字
+                            // 雖然帶有編號，但不包含搜尋關鍵字（例如西門{G4613}），直接還原中文字面量 (不染色)
                             processedLine += chineseChar;
                         }
                     } else {
-                        // 3. 符號與空白還原邏輯：直接原樣接回，保留所有標點與空白空格
+                        // 純標點符號、空格、或如「约翰」「在太16」等沒帶編號的文字，原樣接回，一個字都不會少！
                         processedLine += token;
                     }
                 });
 
                 highlightedText = processedLine;
-                console.log("👉 本行最終生成的 HTML 結果:", JSON.stringify(highlightedText));
-                console.log("%c==========================================", "color: #888;");
             } else {
                 const safeText = typeof escapeHtml === 'function' ? escapeHtml(v.text) : v.text;
                 highlightedText = safeText.split(keyword).join(`<span class='hl'>${keyword}</span>`);
@@ -125,11 +108,6 @@ function buildSectionsHtml(groups, keyword, isSimplifiedMode) {
     return html;
 }
 
-
-                
-// ==========================================
-// 2. 獲取本地辭典定義 HTML
-// ==========================================
 // ========================================== //
 // 2. 獲取本地辭典定義 HTML （已修復純文字結構相容性）
 // ========================================== //
