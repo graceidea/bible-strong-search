@@ -1,6 +1,5 @@
-
 // ==========================================
-// 1. 生成表格 HTML 與精準編號染色邏輯（多編號共存與全文字保護版）
+// 1. 生成表格 HTML 與精準編號染色邏輯（精準染紅，其餘全黑版）
 // ==========================================
 function buildSectionsHtml(groups, keyword, isSimplifiedMode) {
     let html = "";
@@ -8,6 +7,7 @@ function buildSectionsHtml(groups, keyword, isSimplifiedMode) {
 
     sortedKeys.forEach(strongId => {
         let verses = groups[strongId];
+        const currentTargetStrong = strongId.trim().toUpperCase();
 
         // 按卷、章、節排序
         verses.sort((a, b) => {
@@ -17,7 +17,7 @@ function buildSectionsHtml(groups, keyword, isSimplifiedMode) {
         });
 
         const definitionHtml = getLocalStrongsDefinitionHtml(strongId);
-        const isNewTestament = strongId.trim().toUpperCase().startsWith('G');
+        const isNewTestament = currentTargetStrong.startsWith('G');
         const ntClass = isNewTestament ? 'nt-group' : '';
 
         html += `
@@ -57,38 +57,38 @@ function buildSectionsHtml(groups, keyword, isSimplifiedMode) {
                     const hasStrong = /[{<][GH]\d+[a-zA-Z]?[>}]/i.test(token);
 
                     if (hasStrong) {
-                        
-                        // 🎯【安全修復】：純字串清洗，剔除所有非英文、非數字字元，取得極度安全的 StrongId 字串
-                        const tokenStrongId = token.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+                        // 🎯【高精度編號提取】：只取大括號內部的 Strong 編號字串
+                        const strongPartMatch = token.match(/[{<]([GH]\d+[a-zA-Z]?)[>}]/i);
+                        const tokenStrongId = (strongPartMatch && strongPartMatch[1]) ? strongPartMatch[1].toUpperCase() : "";
                         
                         // 提取純文字部分 (例如: "你爱")
                         let chineseChar = token.replace(/[{<][GH]\d+[a-zA-Z]?[>}]/gi, '').trim();
 
                         if (chineseChar && chineseChar.includes(keyword)) {
-                            // 🎯 根據編號決定顏色，不再盲目染黃
-                            if (tokenStrongId === strongId.trim().toUpperCase()) {
-                                // 這個盒子的編號剛好是當前區塊的編號 ➡️ 紅色粗體
+                            // 🎯【核心分流修正】：只有當此盒子的編號，與目前大標題的搜尋編號完全相符，才允許染紅
+                            if (tokenStrongId === currentTargetStrong) {
+                                // 屬於當前搜尋的 Strong Number：紅色粗體
                                 let coloredWord = chineseChar.split(keyword).join(`<span style="color: red; font-weight: bold;">${keyword}</span>`);
                                 processedLine += coloredWord;
                             } else {
-                                // 這個盒子雖然包含關鍵字，但它是別人的編號 ➡️ 黃色高亮
-                                let highlightedWord = chineseChar.split(keyword).join(`<span class="hl">${keyword}</span>`);
-                                processedLine += highlightedWord;
+                                // ⚠️【核心修改】：屬於其他 Strong Number 的愛字，直接回傳正常中文字（維持原樣黑色）
+                                processedLine += chineseChar;
                             }
                         } else {
-                            // 雖然帶有編號，但不包含搜尋關鍵字（例如西門{G4613}），直接還原中文字面量 (不染色)
+                            // 不含搜尋關鍵字（例如西門{G4613}），直接還原純中文字（正常黑色）
                             processedLine += chineseChar;
                         }
                     } else {
-                        // 純標點符號、空格、或如「约翰」「在太16」等沒帶編號的文字，原樣接回，一個字都不會少！
+                        // 純標點符號、空格、或如「约翰」「在太16」等沒帶編號的文字，原樣接回
                         processedLine += token;
                     }
                 });
 
                 highlightedText = processedLine;
             } else {
+                // 如果沒有找到原始文本，回傳基本的字串替代（保底機制）
                 const safeText = typeof escapeHtml === 'function' ? escapeHtml(v.text) : v.text;
-                highlightedText = safeText.split(keyword).join(`<span class='hl'>${keyword}</span>`);
+                highlightedText = safeText.split(keyword).join(`<span style="color: red; font-weight: bold;">${keyword}</span>`);
             }
 
             html += `
