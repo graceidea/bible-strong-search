@@ -1,18 +1,19 @@
 // ==========================================
-// 1. 生成表格 HTML 與精準編號染色邏輯（編號全隱藏、只留精準紅字版）
+// 1. 生成表格 HTML 與精準編號染色邏輯（徹底去括號、去編號、只留純文字版）
 // ==========================================
 function buildSectionsHtml(groups, keyword, isSimplifiedMode) {
     let html = "";
     const sortedKeys = Object.keys(groups).sort(sortStrongIds);
 
     sortedKeys.forEach(strongId => {
-        // 🛑 過濾機制：如果發現是 G0 或 H0 這種異常編號，直接跳過不生成表格
-        if (strongId.trim().toUpperCase() === "G0" || strongId.trim().toUpperCase() === "H0") {
+        const currentTargetStrong = strongId.trim().toUpperCase();
+        
+        // 🛑 1. 攔截機制：如果發現是 G0 或 H0 這種異常編號，直接跳過不生成任何表格
+        if (currentTargetStrong === "G0" || currentTargetStrong === "H0") {
             return;
         }
 
         let verses = groups[strongId];
-        const currentTargetStrong = strongId.trim().toUpperCase();
 
         // 按卷、章、節排序
         verses.sort((a, b) => {
@@ -51,39 +52,42 @@ function buildSectionsHtml(groups, keyword, isSimplifiedMode) {
             if (originalEntry && originalEntry.text) {
                 let rawText = originalEntry.text;
 
-                // 🎯【全新精準雙軌正則】：將經文拆解為「文字」與「標點/括號」兩大類，100% 留住所有歷史字碎片
-                const tokenPattern = /([^\s{}<>]+)|([^{}<>\s]+)|([{}<>])/g;
+                // 🎯【萬能切片正則】：精準切出「文字{編號}」或「純中文字/純符號/純數字」，100% 保留所有歷史字碎片
+                const tokenPattern = /([^\s{}<>]+[{<][GH]\d+[a-zA-Z]?[>}])|([^{}<>]+)|([{}<>])/g;
                 let tokens = rawText.match(tokenPattern) || [rawText];
                 
                 let processedLine = "";
 
                 tokens.forEach((token) => {
-                    // 偵測這個單字字組是否包含原文編號 (不論前面連了多少中文字)
+                    // 檢查這是不是一個包含原文編號的組合盒子 (例如: "信他的{G846}")
                     const hasStrong = /[{<][GH]\d+[a-zA-Z]?[>}]/i.test(token);
 
                     if (hasStrong) {
-                        // 1. 精準拔出這個 Token 的最後一個 Strong 編號
-                        const strongPartMatch = token.match(/[{<]([GH]\d+[a-zA-Z]?)[>}]/i);
-                        const tokenStrongId = (strongPartMatch && strongPartMatch[1]) ? strongPartMatch[1].toUpperCase() : "";
+                        // 1. 純字串過濾法：剔除所有非英數符號，洗出安全的對比編號 (例如 "G846")
+                        const tokenStrongId = token.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
                         
-                        // 2. 徹底清洗掉這個 Token 內所有暴露的 {Gxxx} 或 <Hxxx> 編號
+                        // 2. 徹底清洗：全域移除編號及其外圍的所有大括號 {} 或角括號 <>，徹底不著痕跡！
                         let chineseChar = token.replace(/[{<][GH]\d+[a-zA-Z]?[>}]/gi, '').trim();
 
                         if (chineseChar && chineseChar.includes(keyword)) {
-                            // 🎯 核心分流：只有當前處理的編號對上了，才允許染紅
+                            // 🎯 核心分流修正：只有當前大標題的搜尋編號完全對上了，才允許染紅
                             if (tokenStrongId === currentTargetStrong) {
+                                // 屬於當前搜尋的 Strong Number：紅色粗體
                                 let coloredWord = chineseChar.split(keyword).join(`<span style="color: red; font-weight: bold;">${keyword}</span>`);
                                 processedLine += coloredWord;
                             } else {
-                                // 屬於別人的編號：直接顯示正常中文字（全黑）
+                                // 屬於其他 Strong Number 的字：直接回傳乾淨中文字（正常黑色）
                                 processedLine += chineseChar;
                             }
                         } else {
-                            // 不含搜尋關鍵字，直接還原中文字（全黑）
+                            // 雖然帶有編號，但不包含搜尋關鍵字，直接還原乾淨中文字（正常黑色）
                             processedLine += chineseChar;
                         }
                     } else {
-                        // 純標點、數字或原本就沒帶編號的文字，原樣接回
+                        // 3. 過濾殘留：如果是單獨掉出來的括號字元，直接拋棄；如果是正常標點或沒編號的字（如「约翰」），原樣接回
+                        if (token === "{" || token === "}" || token === "<" || token === ">") {
+                            return; // 徹底封殺任何落單的大括號與角括號
+                        }
                         processedLine += token;
                     }
                 });
