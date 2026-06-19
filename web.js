@@ -32,7 +32,7 @@ function buildSectionsHtml(groups, keyword, isSimplifiedMode) {
         `;
 
         verses.forEach(v => {
-            // 保留你原有的設計：對齊簡繁體資料庫
+            // 1. 100% 沿用你原有的簡繁體資料庫對齊
             const currentDb = isSimplifiedMode ? bibleSimpData : bibleData;
             
             const originalEntry = currentDb.find(s => 
@@ -46,34 +46,41 @@ function buildSectionsHtml(groups, keyword, isSimplifiedMode) {
             if (originalEntry && originalEntry.text) {
                 let rawText = originalEntry.text;
 
-                // ⭐【前置全局大掃除】先拔掉最開頭與最結尾殘留的無效大括號
-                rawText = rawText.replace(/^[<{ ]*[GH]\d+[a-zA-Z]?[>} ]*/g, ''); 
-                rawText = rawText.replace(/^[<>{}[\]\s]+/g, ''); 
+                // 2. 100% 沿用你原有的巨觀萬國碼切片正則，保護所有標點與括號
+                const tokenPattern = /([^\w{}<>]+(?:[<{ ]*[GH]\d+[a-zA-Z]?[>} ]*)+)|([^\w{}<>]+|[^ \u4e00-\u9fa5\w{}<>]+)/g;
+                let tokens = rawText.match(tokenPattern) || [rawText];
+                let processedLine = "";
 
-                // 轉義 strongId 以便安全放入正則表達式
-                const escapedStrong = strongId.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+                tokens.forEach(token => {
+                    // 提取純中文字
+                    let chineseChar = token.replace(/[<{ ]*[GH]\d+[a-zA-Z]?[>} ]*/g, '');
+                    chineseChar = chineseChar.replace(/[<>{}[\]]/g, '').trim();
 
-                // ⭐【三大防線：流線型動態染色演算法】
-                // 1. 先把「中文字+目前的編號」抓出來，將裡面的關鍵字精準染紅
-                //    例如：(你爱){G25} -> 把 "爱" 換成紅色的 "爱"
-                const redRegex = new RegExp(`([^\\s<{}>]+)(?=[<{ ]*${escapedStrong}[>} ]*)`, "gi");
-                rawText = rawText.replace(redRegex, (match) => {
-                    return match.split(keyword).join(`<span style="color: red; font-weight: bold;">${keyword}</span>`);
+                    if (chineseChar && chineseChar.includes(keyword)) {
+                        
+                        // ⭐【修正核心：只改這一行條件】
+                        // 不要用寬鬆的 includes，改用正則檢查：當前的 strongId 是不是正好待在這個 token 的尾巴
+                        const escapedStrong = strongId.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+                        const endWithStrongRegex = new RegExp(`[<{ ]*${escapedStrong}[>} ]*$`, "i");
+
+                        if (endWithStrongRegex.test(token.trim())) {
+                            // 🎯 這個盒子的尾巴確實是目前的編號：字組內的關鍵字精準染成【紅色粗體】
+                            let coloredWord = chineseChar.split(keyword).join(`<span style="color: red; font-weight: bold;">${keyword}</span>`);
+                            processedLine += coloredWord;
+                        } else {
+                            // ⚠️ 這個盒子的尾巴是別人的編號：標記為【黃色常規高亮】
+                            let highlightedWord = chineseChar.split(keyword).join(`<span class="hl">${keyword}</span>`);
+                            processedLine += highlightedWord;
+                        }
+                    } else {
+                        // 3. 100% 沿用你原有的符號還原邏輯
+                        // 修正：原本你寫 processedLine += chineseChar; 會把標點符號本身攜帶的某些空白洗掉。
+                        // 我們這裡直接將非關鍵字的文字或符號原樣接回
+                        processedLine += token.replace(/[<{ ]*[GH]\d+[a-zA-Z]?[>} ]*/g, '').replace(/[<>{}[\]]/g, '');
+                    }
                 });
 
-                // 2. 再把「中文字+其他任何編號」抓出來，將裡面的關鍵字染黃
-                //    例如：(我爱){G5368} -> 把 "爱" 換成黃色的 "爱"
-                const yellowRegex = /([^\s<{}>]+)(?=[<{ ]*[GH]\d+[a-zA-Z]?[>} ]*)/gi;
-                rawText = rawText.replace(yellowRegex, (match) => {
-                    return match.split(keyword).join(`<span class="hl">${keyword}</span>`);
-                });
-
-                // 3. 最後一步：把經文裡所有剩餘的原文編號如 {G25}、{G5368} 通通徹底洗掉
-                //    這能完美保住你所有的標點符號、英文、中文字和括號註解！
-                rawText = rawText.replace(/[<{ ]*[GH]\d+[a-zA-Z]?[>} ]*/g, '');
-                rawText = rawText.replace(/[<>{}[\]]/g, '');
-
-                highlightedText = rawText;
+                highlightedText = processedLine;
             } else {
                 const safeText = typeof escapeHtml === 'function' ? escapeHtml(v.text) : v.text;
                 highlightedText = safeText.split(keyword).join(`<span class='hl'>${keyword}</span>`);
