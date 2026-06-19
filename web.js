@@ -2,6 +2,9 @@
 // ==========================================
 // 1. 生成表格 HTML 與精準編號染色邏輯（多編號共存與全文字保護版）
 // ==========================================
+// ==========================================
+// 1. 生成表格 HTML 與精準編號染色邏輯（多編號共存與全文字保護版）
+// ==========================================
 function buildSectionsHtml(groups, keyword, isSimplifiedMode) {
     let html = "";
     const sortedKeys = Object.keys(groups).sort(sortStrongIds);
@@ -46,7 +49,7 @@ function buildSectionsHtml(groups, keyword, isSimplifiedMode) {
             if (originalEntry && originalEntry.text) {
                 let rawText = originalEntry.text;
 
-                // 🎯【全新萬能切片正則】：精準切出「文字{編號}」或「純中文字/純符號/純數字」，100% 不吞字
+                // 🎯【萬能切片正則】：精準切出「文字{編號}」或「純中文字/純符號/純數字」，100% 不吞字
                 const tokenPattern = /([^\s{}<>]+[{<][GH]\d+[a-zA-Z]?[>}])|([^{}<>]+)|([{}<>])/g;
                 let tokens = rawText.match(tokenPattern) || [rawText];
                 
@@ -57,9 +60,9 @@ function buildSectionsHtml(groups, keyword, isSimplifiedMode) {
                     const hasStrong = /[{<][GH]\d+[a-zA-Z]?[>}]/i.test(token);
 
                     if (hasStrong) {
-                        // 提取編號本身 (例如: "G25")
+                        // 🎯【修正點】：強烈編號是比對陣列，必須取 [1] 拿到字串，才能呼叫 toUpperCase()
                         const strongMatch = token.match(/[{<]([GH]\d+[a-zA-Z]?)[>}]/i);
-                        const tokenStrongId = strongMatch ? strongMatch.toUpperCase() : "";
+                        const tokenStrongId = strongMatch ? strongMatch[1].toUpperCase() : "";
                         
                         // 提取純文字部分 (例如: "你爱")
                         let chineseChar = token.replace(/[{<][GH]\d+[a-zA-Z]?[>}]/gi, '').trim();
@@ -105,6 +108,7 @@ function buildSectionsHtml(groups, keyword, isSimplifiedMode) {
 
     return html;
 }
+
 
 // ========================================== //
 // 2. 獲取本地辭典定義 HTML （已修復純文字結構相容性）
