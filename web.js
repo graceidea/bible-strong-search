@@ -57,9 +57,9 @@ function buildSectionsHtml(groups, keyword, isSimplifiedMode) {
                     const hasStrong = /[{<][GH]\d+[a-zA-Z]?[>}]/i.test(token);
 
                     if (hasStrong) {
-                        // 🎯【修正點】：強烈編號是比對陣列，必須取 [1] 拿到字串，才能呼叫 toUpperCase()
+                        // 🎯【徹底修復點】：先取出 match 陣列中索引為 1 的純字串元素，再轉大寫
                         const strongMatch = token.match(/[{<]([GH]\d+[a-zA-Z]?)[>}]/i);
-                        const tokenStrongId = strongMatch ? strongMatch[1].toUpperCase() : "";
+                        const tokenStrongId = (strongMatch && strongMatch[1]) ? strongMatch[1].toUpperCase() : "";
                         
                         // 提取純文字部分 (例如: "你爱")
                         let chineseChar = token.replace(/[{<][GH]\d+[a-zA-Z]?[>}]/gi, '').trim();
@@ -105,7 +105,6 @@ function buildSectionsHtml(groups, keyword, isSimplifiedMode) {
 
     return html;
 }
-
 
 // ========================================== //
 // 2. 獲取本地辭典定義 HTML （已修復純文字結構相容性）
