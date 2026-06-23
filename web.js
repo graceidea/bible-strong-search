@@ -6,57 +6,87 @@ function buildSectionsHtml(groups, keyword, isSimplifiedMode) {
     const sortedKeys = Object.keys(groups).sort(sortStrongIds);
 
     sortedKeys.forEach(strongId => {
-        const currentTargetStrong = strongId.trim().toUpperCase();
-        
-        // 🛑 1. 攔截機制：如果發現是 G0 或 H0 這種異常編號，直接跳過不生成任何表格
-        if (currentTargetStrong === "G0" || currentTargetStrong === "H0") {
-            return;
-        }
-
         let verses = groups[strongId];
 
+        // 按卷、章、節排序
+        verses.sort((a, b) => {
+            if (a.book_id !== b.book_id) return a.book_id - b.book_id;
+            if (parseInt(a.chapter, 10) !== parseInt(b.chapter, 10)) return parseInt(a.chapter, 10) - parseInt(b.chapter, 10);
+            return parseInt(a.verse, 10) - parseInt(b.verse, 10);
+        });
 
-// ==========================================
-// 2. 獲取本地辭典定義 HTML
-// ==========================================
-function getLocalStrongsDefinitionHtml(strongId) {
-    const dict = typeof strongsDict !== 'undefined' ? strongsDict : window.strongsDict;
-    if (!dict || !dict[strongId]) return "";
+        const definitionHtml = getLocalStrongsDefinitionHtml(strongId);
+        const isNewTestament = strongId.trim().toUpperCase().startsWith('G');
+        const ntClass = isNewTestament ? 'nt-group' : '';
 
-    const rawText = dict[strongId]; 
-    let lemma = "";
-    let content = rawText;
-
-    const safeEscape = typeof escapeHtml === 'function' ? escapeHtml : function(str) {
-        return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
-    };
-
-    if (rawText.includes('|')) {
-        const parts = rawText.split('|');
-        lemma = `<span class="dict-lemma" style="color: #4a90e2; font-weight: bold; margin-left: 5px;">${safeEscape(parts[0].trim())}</span>`;
-        content = parts.slice(1).join('|').trim();
-    }
-
-    let formattedContent = safeEscape(content).replace(/\n/g, '<br>');
-
-    if (formattedContent.length > 150) {
-        formattedContent = formattedContent.substring(0, 150) + "...";
-    }
-
-    return `
-        <div class="strongs-tooltip" style="display: inline-block; margin-left: 10px; position: relative; font-size: 14px;">
-            <span class="tooltip-trigger" style="cursor: pointer; background: #eef2f7; padding: 2px 6px; border-radius: 4px; color: #555; border: 1px solid #ddd;">ℹ️ 字典定義</span>
-            <div class="tooltip-content" style="display: none; position: absolute; left: 0; top: 25px; background: white; border: 1px solid #ccc; padding: 10px; width: 320px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); z-index: 999; border-radius: 6px; font-weight: normal; color: #333; text-align: left; line-height: 1.4;">
-                <div class="dict-header" style="border-bottom: 1px solid #eee; padding-bottom: 5px; margin-bottom: 5px; font-weight: bold; color: #000;">
-                    ${safeEscape(strongId)} ${lemma}
-                </div>
-                <div class="dict-body" style="max-height: 200px; overflow-y: auto; font-size: 13px;">
-                    ${formattedContent}
-                </div>
-            </div>
+        html += `
+        <div class='group-title ${ntClass}'>
+            <span>原文編號: <strong>${strongId}</strong>${definitionHtml}</span>
+            <span class="summary-badge">共 ${verses.length} 節</span>
         </div>
-    `;
+        <table>
+            <thead>
+                <tr><th style='width:25%'>書卷</th><th style='width:20%'>章節</th><th>經文內容</th></tr>
+            </thead>
+            <tbody>
+        `;
+
+        verses.forEach(v => {
+            // 保留你原有的設計：精確對齊簡繁體資料庫
+            const currentDb = isSimplifiedMode ? bibleSimpData : bibleData;
+            
+            const originalEntry = currentDb.find(s => 
+                parseInt(s.book, 10) === v.book_id && 
+                parseInt(s.chapter, 10) === parseInt(v.chapter, 10) && 
+                parseInt(s.verse, 10) === parseInt(v.verse, 10)
+            );
+            
+            let highlightedText = "";
+
+            if (originalEntry && originalEntry.text) {
+                let rawText = originalEntry.text;
+
+                // 轉義目前的 strongId 以便安全放入正則
+                const escapedStrong = strongId.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+
+                // 🎯 1. 精準攔截：將後面緊跟著「當前編號」的關鍵字標記為【紅色】
+                // 允許中間有空格或括號，例如：膀臂 {H68} 或 膀臂<H68>
+                const redRegex = new RegExp(`(${keyword})(?=[\\s<{|\\[]*${escapedStrong})`, "gi");
+                rawText = rawText.replace(redRegex, "__RED_KEYWORD__");
+
+                // 🎯 2. 常規攔截：將其他所有的關鍵字標記為【黃色】
+                const yellowRegex = new RegExp(keyword, "g");
+                rawText = rawText.replace(yellowRegex, "__YELLOW_KEYWORD__");
+
+                // 🎯 3. 大掃除：徹底蒸發經文裡的所有原文編號與殘留括號
+                rawText = rawText.replace(/[<{ ]*[GH]\d+[a-zA-Z]?[>} ]*/gi, '');
+                rawText = rawText.replace(/[<>{}[\]]/g, '');
+
+                // 🎯 4. 還原標籤：將標記替換成真正的網頁顏色
+                rawText = rawText.split("__RED_KEYWORD__").join(`<span style="color: red; font-weight: bold;">${keyword}</span>`);
+                rawText = rawText.split("__YELLOW_KEYWORD__").join(`<span class="hl">${keyword}</span>`);
+
+                highlightedText = rawText;
+            } else {
+                const safeText = typeof escapeHtml === 'function' ? escapeHtml(v.text) : v.text;
+                highlightedText = safeText.split(keyword).join(`<span class='hl'>${keyword}</span>`);
+            }
+
+            html += `
+            <tr>
+                <td>${v.book_name}</td>
+                <td>${v.chapter}:${v.verse}</td>
+                <td>${highlightedText}</td>
+            </tr>
+            `;
+        });
+
+        html += `</tbody></table><hr class='group-divider'>`;
+    });
+
+    return html;
 }
+
 
 
 // ========================================== //
