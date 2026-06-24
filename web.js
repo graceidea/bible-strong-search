@@ -246,35 +246,54 @@ class StrongSearchBuilder {
     }
 
     _getChineseVariants(keyword) {
-        if (!keyword) return [];
-        const variants = [keyword];
-        
-        // 简繁转换映射（可扩展）
-        const traditionalMap = {
-            '爱': '愛',
-            '神': '神',
-            '信': '信',
-            '望': '望',
-            '义': '義',
-            '约': '約',
-            '经': '經',
-            '书': '書',
-            '灵': '靈',
-            '圣': '聖'
-        };
-        
-        if (traditionalMap[keyword]) {
-            variants.push(traditionalMap[keyword]);
-        }
-        
-        const simplifiedMap = Object.fromEntries(
-            Object.entries(traditionalMap).map(([k, v]) => [v, k])
-        );
-        if (simplifiedMap[keyword]) {
-            variants.push(simplifiedMap[keyword]);
-        }
-        
-        return [...new Set(variants.filter(v => v && v.length > 0))];
+    if (!keyword) return [];
+    
+    // 🔥 确保关键词是字符串
+    const kw = String(keyword).trim();
+    const variants = [kw];
+    
+    // 简繁转换映射
+    const traditionalMap = {
+        '爱': '愛',
+        '神': '神',
+        '信': '信',
+        '望': '望',
+        '义': '義',
+        '约': '約',
+        '经': '經',
+        '书': '書',
+        '灵': '靈',
+        '圣': '聖',
+        '会': '會',
+        '们': '們',
+        '时': '時',
+        '后': '後',
+        '种': '種',
+        '样': '樣',
+        '里': '裡',
+        '个': '個',
+        '乐': '樂',
+        '爱': '愛'
+    };
+    
+    // 添加繁体版本
+    if (traditionalMap[kw]) {
+        variants.push(traditionalMap[kw]);
+    }
+    
+    // 反向：如果是繁体，添加简体
+    const simplifiedMap = {};
+    for (const [simp, trad] of Object.entries(traditionalMap)) {
+        simplifiedMap[trad] = simp;
+    }
+    if (simplifiedMap[kw]) {
+        variants.push(simplifiedMap[kw]);
+    }
+    
+    // 🔥 调试：打印变体
+    console.log('🔍 关键词变体:', variants);
+    
+    return [...new Set(variants.filter(v => v && v.length > 0))];
     }
 
     _sortStrongIds(a, b) {
