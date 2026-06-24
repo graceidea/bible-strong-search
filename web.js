@@ -1,26 +1,13 @@
 // ==========================================
-// 1. 生成表格 HTML 與精準編號染色邏輯（字典核心級過濾、徹底根除無關編號版）
+// 1. 生成表格 HTML 與精準編號染色邏輯（柔和局部清洗、真愛回歸純淨版）
 // ==========================================
 function buildSectionsHtml(groups, keyword, isSimplifiedMode) {
   let html = "";
-  
-  // 🎯 1. 深度清洗與過濾：引入「字典釋義雙重校驗機制」
   const cleanGroups = {};
-  const dict = typeof strongsDict !== 'undefined' ? strongsDict : window.strongsDict;
   
+  // 🎯 1. 柔和清洗與數據過濾
   Object.keys(groups).forEach(strongId => {
     const verses = groups[strongId];
-    
-    // 🔍 第一重防線：查字典。如果這個編號在字典裡的釋義根本不包含「愛」字，直接徹底踢除！
-    if (dict && dict[strongId]) {
-      const dictText = dict[strongId];
-      // 如果查的是“愛”，而字典裡寫的是“人”、“我”、“在”，則判定無關，直接跳過該編號
-      if (!dictText.includes(keyword)) {
-        return; 
-      }
-    }
-
-    // 🔍 第二重防線：檢查經文對齊跨度
     const validVerses = [];
     const targetStrong = strongId.trim().toUpperCase();
 
@@ -40,10 +27,16 @@ function buildSectionsHtml(groups, keyword, isSimplifiedMode) {
           const idx = upperText.indexOf(targetStrong);
           const leftPart = rawText.substring(0, idx);
           
-          // 抓取緊鄰該編號左側的連續漢字詞組
+          // 🛠️ 核心修正：捕獲緊鄰該編號左側的連續漢字詞組
           const wordMatch = leftPart.match(/([^\x00-\xff]+)[<\s{\[]*$/);
-          if (wordMatch && wordMatch[1] && wordMatch[1].includes(keyword)) {
-            validVerses.push(v);
+          
+          if (wordMatch) {
+            const exactBoundWord = wordMatch[1]; // 拿到緊挨著這個編號的中文詞（例如 "愛我"、"你所愛的人"）
+            
+            // 只要這個詞組裡確實包含關鍵字（如“愛”），這節經文就是有效的真愛！
+            if (exactBoundWord.includes(keyword)) {
+              validVerses.push(v);
+            }
           }
         }
       } else {
@@ -53,12 +46,13 @@ function buildSectionsHtml(groups, keyword, isSimplifiedMode) {
       }
     });
 
+    // 只有當這個原文編號下存在真正跟“愛”字有關的經文時，才保留這個 StrongId 表格
     if (validVerses.length > 0) {
       cleanGroups[strongId] = validVerses;
     }
   });
 
-  // 🎯 2. 使用真愛數據進行網頁渲染
+  // 🎯 2. 使用清洗後的純淨數據進行網頁渲染
   const sortedKeys = Object.keys(cleanGroups).sort(sortStrongIds);
 
   if (sortedKeys.length === 0) {
@@ -112,12 +106,14 @@ function buildSectionsHtml(groups, keyword, isSimplifiedMode) {
           
           const wordMatch = leftText.match(/([^\x00-\xff]+)([<\s{\[]*)$/);
           if (wordMatch) {
-            const targetWord = wordMatch[1]; 
+            const targetWord = wordMatch[1]; // 拿到例如 "愛心"、"愛我"、"你所愛的人"
             const symbols = wordMatch[2];    
             const remainLeft = leftText.substring(0, leftText.length - wordMatch[0].length);
             
             if (targetWord.includes(keyword)) {
-              rawText = remainLeft + `__RED_START__${targetWord}__RED_END__` + symbols + rightText;
+              // 🎯 【高亮微調】：只在詞組內的“愛”字兩邊包上紅色標籤，其餘字（如 “我”）維持正常黑色
+              const redPart = targetWord.split(keyword).join(`__RED_START__${keyword}__RED_END__`);
+              rawText = remainLeft + redPart + symbols + rightText;
             }
           }
         }
