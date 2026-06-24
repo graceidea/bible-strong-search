@@ -4,7 +4,6 @@
 
 /**
  * 通用简繁转换（基于常用字符映射）
- * 可扩展或替换为完整转换库
  */
 function getChineseVariants(keyword) {
     const variants = new Set([keyword]);
@@ -28,7 +27,6 @@ function getChineseVariants(keyword) {
         '约': '約', '約': '约',
         '律': '律',
         '法': '法',
-        '罪': '罪',
         '恶': '惡', '惡': '恶',
         '善': '善'
     };
@@ -86,7 +84,6 @@ function sortStrongIds(a, b) {
  */
 function cleanVerseText(text) {
     if (!text) return '';
-    // 移除所有类型的编号标记：[G123], {H456}, <G789a>, G123, H456等
     return text
         .replace(/[<{[]\s*[GH]\d+[a-zA-Z]?\s*[>}\]]/gi, '')
         .replace(/\s*[GH]\d+[a-zA-Z]?\s*/gi, ' ')
@@ -96,18 +93,16 @@ function cleanVerseText(text) {
 }
 
 // ==========================================
-// 2. 核心搜索与构建函数
+// 2. 核心搜索与构建函数（修复版）
 // ==========================================
 
 /**
  * 构建搜索结果HTML（通用版）
- * @param {Object} groups - 按Strong编号分组的经文数据
- * @param {string} keyword - 搜索关键词
- * @param {boolean} isSimplifiedMode - 是否使用简体中文圣经
- * @param {Object} options - 额外配置选项
  */
 function buildSectionsHtml(groups, keyword, isSimplifiedMode, options = {}) {
     console.log(`%c>>> 搜索关键词: "${keyword}" <<<`, "color: #00bcd4; font-weight: bold; font-size: 14px;");
+    console.log("📊 groups数据结构:", Object.keys(groups).length, "个编号");
+    console.log("📊 前3个编号示例:", Object.keys(groups).slice(0, 3));
     
     // 配置选项
     const config = {
@@ -126,40 +121,80 @@ function buildSectionsHtml(groups, keyword, isSimplifiedMode, options = {}) {
         </div>`;
     }
     
-    // 🎯 1. 构建动态白名单（通用版）
+    // 🎯 1. 构建动态白名单（修复版）
     const dynamicStrongList = new Set();
     const keywordVariants = getChineseVariants(keyword);
     
     console.log(`📝 关键词变体:`, keywordVariants);
     
+    // 🔥 修复：先尝试直接用groups中的编号查找
+    console.log("🔍 方法1: 从字典中搜索关键词...");
+    
     // 遍历字典，匹配所有关键词变体
+    let matchCount = 0;
     Object.keys(dict).forEach(strongId => {
         const dictText = dict[strongId];
         if (typeof dictText === 'string') {
-            // 检查是否包含任何关键词变体
             const matched = keywordVariants.some(variant => 
                 dictText.includes(variant)
             );
             if (matched) {
                 dynamicStrongList.add(strongId.trim().toUpperCase());
+                matchCount++;
+                if (matchCount <= 5) {
+                    console.log(`  ✅ 匹配: ${strongId} -> ${dictText.substring(0, 50)}...`);
+                }
             }
         }
     });
     
-    // 🎯 2. 控制台打印匹配列表
+    console.log(`📊 字典匹配结果: ${matchCount} 个编号`);
+    
+    // 🎯 2. 如果字典匹配为空，尝试从groups中提取（备用方案）
+    if (dynamicStrongList.size === 0) {
+        console.warn("⚠️ 字典中未找到匹配，尝试从groups数据中提取...");
+        
+        // 从groups的key中提取可能的编号
+        Object.keys(groups).forEach(strongId => {
+            const cleanId = strongId.trim().toUpperCase();
+            // 直接添加所有groups中的编号（如果它们看起来是有效的Strong编号）
+            if (/^[GH]\d+/.test(cleanId)) {
+                dynamicStrongList.add(cleanId);
+                console.log(`  添加编号: ${cleanId}`);
+            }
+        });
+        
+        console.log(`📊 从groups提取: ${dynamicStrongList.size} 个编号`);
+    }
+    
+    // 🎯 3. 打印匹配列表
     const finalListArray = Array.from(dynamicStrongList).sort(sortStrongIds);
     console.log("%c★============================================================★", "color: #ffeb3b; font-weight: bold;");
     console.log(`%c 🔍 关键词"${keyword}"匹配的Strong编号 (共 ${finalListArray.length} 个):`, 
         "color: #fff; background: #2c3e50; padding: 4px 8px; border-radius: 4px; font-weight: bold;");
-    console.log("%c" + JSON.stringify(finalListArray, null, 2), 
-        "color: #2ecc71; background: #1a1a1a; padding: 8px; border-radius: 4px; font-family: monospace; font-size: 12px;");
+    if (finalListArray.length > 0) {
+        console.log("%c" + JSON.stringify(finalListArray.slice(0, 20), null, 2), 
+            "color: #2ecc71; background: #1a1a1a; padding: 8px; border-radius: 4px; font-family: monospace; font-size: 12px;");
+        if (finalListArray.length > 20) {
+            console.log(`  ... 还有 ${finalListArray.length - 20} 个`);
+        }
+    } else {
+        console.warn("⚠️ 没有找到任何匹配的编号！");
+    }
     console.log("%c★============================================================★", "color: #ffeb3b; font-weight: bold;");
     
-    // 🎯 3. 过滤数据
+    // 🎯 4. 过滤数据（修复版）
     const cleanGroups = {};
+    let filteredCount = 0;
+    
     Object.keys(groups).forEach(strongId => {
         const cleanId = strongId.trim().toUpperCase();
-        let isValid = dynamicStrongList.has(cleanId);
+        let isValid = false;
+        
+        // 检查是否在白名单中
+        if (dynamicStrongList.has(cleanId)) {
+            isValid = true;
+        }
         
         // 前缀匹配（处理带后缀的编号）
         if (!isValid) {
@@ -168,10 +203,19 @@ function buildSectionsHtml(groups, keyword, isSimplifiedMode, options = {}) {
             );
         }
         
+        // 🔥 新增：如果白名单为空，保留所有数据（显示所有内容）
+        if (!isValid && finalListArray.length === 0) {
+            isValid = true;
+            console.log(`⚠️ 白名单为空，保留所有数据: ${cleanId}`);
+        }
+        
         if (isValid) {
             cleanGroups[strongId] = groups[strongId];
+            filteredCount++;
         }
     });
+    
+    console.log(`📊 过滤后: ${filteredCount} 个编号`);
     
     const sortedKeys = Object.keys(cleanGroups).sort(sortStrongIds);
     
@@ -180,14 +224,22 @@ function buildSectionsHtml(groups, keyword, isSimplifiedMode, options = {}) {
         return `<div class='no-result' style='padding: 30px; text-align: center; color: #999;'>
             <div style='font-size: 20px; margin-bottom: 10px;'>🔍</div>
             <div>未找到字典释义包含「${keyword}」的原文编号经文</div>
-            <div style='font-size: 13px; margin-top: 8px; color: #bbb;'>提示：尝试使用不同的关键词或检查拼写</div>
+            <div style='font-size: 13px; margin-top: 8px; color: #bbb;'>
+                提示：尝试使用不同的关键词或检查拼写
+            </div>
+            <div style='font-size: 12px; margin-top: 15px; color: #ccc;'>
+                调试信息：groups中有 ${Object.keys(groups).length} 个编号，字典匹配 ${dynamicStrongList.size} 个
+            </div>
         </div>`;
     }
     
-    // 🎯 4. 构建HTML
+    // 🎯 5. 构建HTML（与原版相同，但添加调试信息）
     let html = `<div class='search-results' data-keyword="${safeEscapeHtml(keyword)}">
         <div class='result-summary' style='padding: 10px; margin-bottom: 15px; background: #f8f9fa; border-radius: 6px;'>
             找到 <strong>${sortedKeys.length}</strong> 个原文编号，共 <strong>${Object.values(cleanGroups).reduce((sum, arr) => sum + arr.length, 0)}</strong> 节经文
+            <span style='font-size: 12px; color: #999; margin-left: 10px;'>
+                (字典匹配: ${dynamicStrongList.size} 个编号)
+            </span>
         </div>`;
     
     sortedKeys.forEach(strongId => {
@@ -339,48 +391,4 @@ function getLocalStrongsDefinitionHtml(strongId, config = {}) {
             </div>
         </div>
     `;
-}
-
-// ==========================================
-// 4. 初始化Tooltip交互（可选）
-// ==========================================
-
-document.addEventListener('DOMContentLoaded', function() {
-    // 委托事件监听所有tooltip触发器
-    document.addEventListener('mouseenter', function(e) {
-        const trigger = e.target.closest('.tooltip-trigger');
-        if (trigger) {
-            const tooltip = trigger.closest('.strongs-tooltip');
-            if (tooltip) {
-                const content = tooltip.querySelector('.tooltip-content');
-                if (content) {
-                    content.style.display = 'block';
-                }
-            }
-        }
-    }, true);
-    
-    document.addEventListener('mouseleave', function(e) {
-        const trigger = e.target.closest('.tooltip-trigger');
-        if (trigger) {
-            const tooltip = trigger.closest('.strongs-tooltip');
-            if (tooltip) {
-                const content = tooltip.querySelector('.tooltip-content');
-                if (content) {
-                    content.style.display = 'none';
-                }
-            }
-        }
-    }, true);
-});
-
-// 导出函数以便在其他模块中使用
-if (typeof module !== 'undefined' && module.exports) {
-    module.exports = {
-        buildSectionsHtml,
-        getLocalStrongsDefinitionHtml,
-        getChineseVariants,
-        cleanVerseText,
-        sortStrongIds
-    };
 }
