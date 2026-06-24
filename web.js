@@ -107,54 +107,75 @@ class StrongSearchBuilder {
      * 🔥 核心方法：建立关键词的Strong编号索引
      * 返回: Set 包含所有匹配的Strong编号
      */
-    _buildStrongIndex(keyword) {
-        // 检查缓存
-        const cacheKey = keyword;
-        if (this._strongIndexCache.has(cacheKey)) {
-            if (this.config.debugMode) {
-                console.log(`✅ 使用缓存的索引: "${keyword}"`);
-            }
-            return this._strongIndexCache.get(cacheKey);
-        }
-
-        const index = new Set();
-        const keywordVariants = this._getChineseVariants(keyword);
-        
+   _buildStrongIndex(keyword) {
+    // 检查缓存
+    const cacheKey = keyword;
+    if (this._strongIndexCache.has(cacheKey)) {
         if (this.config.debugMode) {
-            console.log(`🔍 建立索引: "${keyword}" 变体:`, keywordVariants);
+            console.log(`✅ 使用缓存的索引: "${keyword}"`);
         }
+        return this._strongIndexCache.get(cacheKey);
+    }
 
-        // 🔥 遍历所有Strong编号，检查字典释义
-        const allStrongIds = Object.keys(this.strongsDict);
-        let matchedCount = 0;
-        
-        allStrongIds.forEach(strongId => {
-            const dictText = this.strongsDict[strongId];
-            if (dictText && typeof dictText === 'string') {
-                // 检查字典释义是否包含任何关键词变体
-                const matched = keywordVariants.some(variant => 
-                    dictText.includes(variant)
-                );
-                if (matched) {
-                    const cleanId = strongId.trim().toUpperCase();
-                    index.add(cleanId);
-                    matchedCount++;
-                    
-                    if (this.config.debugMode && matchedCount <= 10) {
-                        console.log(`  ✅ 匹配: ${cleanId} -> ${dictText.substring(0, 50)}...`);
-                    }
-                }
-            }
-        });
+    const index = new Set();
+    const keywordVariants = this._getChineseVariants(keyword);
+    
+    console.log(`🔍 建立索引: "${keyword}" 变体:`, keywordVariants);
 
-        if (this.config.debugMode) {
-            console.log(`📊 索引建立完成: 找到 ${index.size} 个匹配的Strong编号`);
-        }
-
-        // 缓存结果
-        this._strongIndexCache.set(cacheKey, index);
+    // 🔥 检查字典是否存在
+    if (!this.strongsDict || Object.keys(this.strongsDict).length === 0) {
+        console.error('❌ strongsDict 为空或未加载！');
         return index;
     }
+
+    // 遍历所有Strong编号
+    const allStrongIds = Object.keys(this.strongsDict);
+    console.log(`📊 字典中共有 ${allStrongIds.length} 个编号`);
+    
+    let matchedCount = 0;
+    
+    allStrongIds.forEach(strongId => {
+        const dictText = this.strongsDict[strongId];
+        if (dictText && typeof dictText === 'string') {
+            // 🔥 检查字典释义是否包含任何关键词变体
+            const matched = keywordVariants.some(variant => {
+                if (!variant) return false;
+                return dictText.includes(variant);
+            });
+            
+            if (matched) {
+                const cleanId = strongId.trim().toUpperCase();
+                index.add(cleanId);
+                matchedCount++;
+                
+                if (this.config.debugMode && matchedCount <= 10) {
+                    console.log(`  ✅ 匹配: ${cleanId} -> ${dictText.substring(0, 50)}...`);
+                }
+            }
+        }
+    });
+
+    console.log(`📊 索引建立完成: 找到 ${index.size} 个匹配的Strong编号`);
+    
+    // 🔥 如果没有匹配，尝试用第一个变体单独搜索
+    if (index.size === 0 && keywordVariants.length > 0) {
+        console.log(`⚠️ 没有匹配，尝试单独搜索: "${keywordVariants[0]}"`);
+        allStrongIds.forEach(strongId => {
+            const dictText = this.strongsDict[strongId];
+            if (dictText && typeof dictText === 'string' && dictText.includes(keywordVariants[0])) {
+                const cleanId = strongId.trim().toUpperCase();
+                index.add(cleanId);
+                matchedCount++;
+                console.log(`  ✅ 单独匹配: ${cleanId}`);
+            }
+        });
+        console.log(`📊 单独搜索后: ${index.size} 个匹配`);
+    }
+
+    // 缓存结果
+    this._strongIndexCache.set(cacheKey, index);
+    return index;
+  }
 
     /**
      * 🔥 核心方法：用索引过滤经文
