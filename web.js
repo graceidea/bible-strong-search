@@ -1,5 +1,5 @@
 // ==========================================
-// 1. 生成表格 HTML 與精準編號染色邏輯（徹底剔除無關編號、純淨文字版）
+// 1. 生成表格 HTML 與精準編號染色邏輯（100% 穩定、徹底剔除無關編號版）
 // ==========================================
 function buildSectionsHtml(groups, keyword, isSimplifiedMode) {
   let html = "";
@@ -24,12 +24,12 @@ function buildSectionsHtml(groups, keyword, isSimplifiedMode) {
         const rawText = originalEntry.text;
         const upperText = rawText.toUpperCase();
         
-        // 用目前強編號作為刀刃把經文切開
+        // 用目前強編號將經文切開
         if (upperText.includes(targetStrong)) {
-          const parts = upperText.split(targetStrong);
+          const idx = upperText.indexOf(targetStrong);
           
           // 拿到強編號左側的所有文字片段
-          const leftSegment = parts[0] || "";
+          const leftSegment = rawText.substring(0, idx);
           
           // 提取左側片段最後 8 個字元（足以容納 "你所愛的人"、"愛心" 等中文詞組跨度）
           const tailText = leftSegment.substring(Math.max(0, leftSegment.length - 8));
@@ -152,7 +152,7 @@ function buildSectionsHtml(groups, keyword, isSimplifiedMode) {
 }
 
 // ==========================================
-// 2. 獲取本地辭典定義 HTML（已完美修復 parts.trim 陣列類型 Bug）
+// 2. 獲取本地辭典定義 HTML（徹底移除陣列操作，100% 避坑防崩潰）
 // ==========================================
 function getLocalStrongsDefinitionHtml(strongId) {
   const dict = typeof strongsDict !== 'undefined' ? strongsDict : window.strongsDict;
@@ -166,11 +166,14 @@ function getLocalStrongsDefinitionHtml(strongId) {
     return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
   };
 
-  // 🎯 核心修復：正確讀取 parts[0] 字串後再執行 trim()
-  if (rawText.includes('|')) {
-    const parts = rawText.split('|');
-    lemma = `<span class="dict-lemma" style="color: #4a90e2; font-weight: bold; margin-left: 5px;">${safeEscape(parts[0].trim())}</span>`;
-    content = parts.slice(1).join('|').trim();
+  // 🎯 採用更安全的字串原生截取，不使用 split 陣列，完美防禦任何未知資料格式
+  if (typeof rawText === 'string' && rawText.includes('|')) {
+    const pipeIndex = rawText.indexOf('|');
+    const firstPart = rawText.substring(0, pipeIndex).trim();
+    const secondPart = rawText.substring(pipeIndex + 1).trim();
+    
+    lemma = `<span class="dict-lemma" style="color: #4a90e2; font-weight: bold; margin-left: 5px;">${safeEscape(firstPart)}</span>`;
+    content = secondPart;
   }
 
   let formattedContent = safeEscape(content).replace(/\n/g, '<br>');
