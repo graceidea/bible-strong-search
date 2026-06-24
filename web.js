@@ -1,163 +1,386 @@
 // ==========================================
-// 1. 生成表格 HTML 與精準編號染色邏輯（動態關鍵字白名單控制、極致純淨通用版）
+// 1. 通用工具函数
 // ==========================================
-function buildSectionsHtml(groups, keyword, isSimplifiedMode) {
-  let html = "";
-  
-  // 取得全域的字典物件（兼容跨文件調用，若找不到則嘗試去 window 找）
-  const dict = typeof strongsDict !== 'undefined' ? strongsDict : window.strongsDict;
-  
-  // 🎯 【核心突破】根據輸入的關鍵字，動態建立專屬的原文編號白名單 (Dynamic StrongList)
-  const dynamicStrongList = new Set();
-  
-  if (dict && keyword) {
-    Object.keys(dict).forEach(strongId => {
-      const dictText = dict[strongId];
-      // 只要這個編號在原文字典裡的定義包含了使用者搜尋的關鍵字（如「愛」或「信」等），就加入白名單
-      if (typeof dictText === 'string' && dictText.includes(keyword)) {
-        dynamicStrongList.add(strongId.trim().toUpperCase());
-      }
+
+/**
+ * 通用简繁转换（基于常用字符映射）
+ * 可扩展或替换为完整转换库
+ */
+function getChineseVariants(keyword) {
+    const variants = new Set([keyword]);
+    
+    // 常用简繁映射表（可扩展）
+    const charMap = {
+        '爱': '愛', '愛': '爱',
+        '义': '義', '義': '义',
+        '信': '信',
+        '罪': '罪',
+        '神': '神',
+        '主': '主',
+        '耶稣': '耶穌', '耶穌': '耶稣',
+        '基督': '基督',
+        '圣': '聖', '聖': '圣',
+        '灵': '靈', '靈': '灵',
+        '恩': '恩',
+        '典': '典',
+        '救': '救',
+        '赎': '贖', '贖': '赎',
+        '约': '約', '約': '约',
+        '律': '律',
+        '法': '法',
+        '罪': '罪',
+        '恶': '惡', '惡': '恶',
+        '善': '善'
+    };
+    
+    // 生成所有可能的变体组合
+    let chars = keyword.split('');
+    let combinations = [chars];
+    
+    chars.forEach((char, index) => {
+        if (charMap[char]) {
+            const newCombinations = [];
+            combinations.forEach(combo => {
+                const variant = [...combo];
+                variant[index] = charMap[char];
+                newCombinations.push(variant);
+            });
+            combinations = combinations.concat(newCombinations);
+        }
     });
-  }
-
-  const cleanGroups = {};
-  
-  // 🎯 動態白名單大清洗：只要不在動態白名單內的編號（如鄰近詞 G444, G846 等）直接整塊驅逐，不生成表格
-  Object.keys(groups).forEach(strongId => {
-    const cleanId = strongId.trim().toUpperCase();
     
-    // 檢查目前強編號是否在動態生成的白名單中（相容帶有字母尾碼如 G25a 的情況）
-    let isValidCode = dynamicStrongList.has(cleanId);
-    
-    if (!isValidCode) {
-      // 進行模糊前綴匹配（防禦 G25a 這種尾碼）
-      isValidCode = Array.from(dynamicStrongList).some(validId => cleanId.startsWith(validId));
-    }
-    
-    if (isValidCode) {
-      cleanGroups[strongId] = groups[strongId]; // 只有真正定義相關的原文編號會被保留
-    }
-  });
-
-  // 🎯 使用清洗後的純淨真愛數據進行排序與網頁渲染
-  const sortedKeys = Object.keys(cleanGroups).sort(sortStrongIds);
-
-  if (sortedKeys.length === 0) {
-    return `<div class='no-result' style='padding: 20px; text-align: center; color: #999;'>
-              未找到字典釋義包含「${keyword}」的原文編號經文。
-            </div>`;
-  }
-
-  sortedKeys.forEach(strongId => {
-    let verses = cleanGroups[strongId];
-    
-    // 按卷、章、節排序
-    verses.sort((a, b) => {
-      if (a.book_id !== b.book_id) return a.book_id - b.book_id;
-      if (parseInt(a.chapter, 10) !== parseInt(b.chapter, 10)) return parseInt(a.chapter, 10) - parseInt(b.chapter, 10);
-      return parseInt(a.verse, 10) - parseInt(b.verse, 10);
+    combinations.forEach(combo => {
+        variants.add(combo.join(''));
     });
+    
+    return Array.from(variants);
+}
 
-    const definitionHtml = getLocalStrongsDefinitionHtml(strongId);
-    const isNewTestament = strongId.trim().toUpperCase().startsWith('G');
-    const ntClass = isNewTestament ? 'nt-group' : '';
+/**
+ * 安全HTML转义
+ */
+function safeEscapeHtml(str) {
+    if (!str) return '';
+    const map = {
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#039;'
+    };
+    return String(str).replace(/[&<>"']/g, function(m) { return map[m]; });
+}
 
-    html += `
-      <div class='group-title ${ntClass}'>
-        <span>原文編號: <strong>${strongId}</strong>${definitionHtml}</span>
-        <span class="summary-badge">共 ${verses.length} 節</span>
-      </div>
-      <table>
-        <thead>
-          <tr><th style='width:25%'>書卷</th><th style='width:20%'>章節</th><th>經文內容</th></tr>
-        </thead>
-        <tbody>
-    `;
+/**
+ * Strong编号排序函数
+ */
+function sortStrongIds(a, b) {
+    const aNum = parseInt(a.replace(/[^0-9]/g, '')) || 0;
+    const bNum = parseInt(b.replace(/[^0-9]/g, '')) || 0;
+    if (aNum !== bNum) return aNum - bNum;
+    return a.localeCompare(b);
+}
 
-    verses.forEach(v => {
-      const currentDb = isSimplifiedMode ? bibleSimpData : bibleData;
-      const originalEntry = currentDb ? currentDb.find(s => 
-        parseInt(s.book, 10) === v.book_id && 
-        parseInt(s.chapter, 10) === parseInt(v.chapter, 10) && 
-        parseInt(s.verse, 10) === parseInt(v.verse, 10)
-      ) : null;
-
-      let highlightedText = "";
-      
-      if (originalEntry && originalEntry.text) {
-        let rawText = originalEntry.text;
-
-        // 大掃除：徹底蒸發經文裡的所有原文編號與殘留括號
-        rawText = rawText.replace(/[<{ ]*[GH]\d+[a-zA-Z]?[>} ]*/gi, '');
-        rawText = rawText.replace(/[<>{}[\]]/g, '');
-
-        // 🎯 極致純淨染色：只將搜尋的關鍵字（如「愛」）染成紅色，別的任何字（包括“心”、“我”等鄰近漢字）都不要變
-        // 使用 split 和 join 是 JavaScript 中最穩固、絕無任何正則回溯死循環風險的染色法
-        highlightedText = rawText.split(keyword).join(`<span style="color: red; font-weight: bold;">${keyword}</span>`);
-        
-      } else {
-        // Fallback 安全回退機制
-        const safeText = typeof escapeHtml === 'function' ? escapeHtml(v.text) : v.text;
-        highlightedText = safeText.split(keyword).join(`<span style="color: red; font-weight: bold;">${keyword}</span>`);
-      }
-
-      html += `
-        <tr>
-          <td>${v.book_name}</td>
-          <td>${v.chapter}:${v.verse}</td>
-          <td>${highlightedText}</td>
-        </tr>
-      `;
-    });
-
-    html += `</tbody></table><hr class='group-divider'>`;
-  });
-
-  return html;
+/**
+ * 清理经文中的原文编号标记
+ */
+function cleanVerseText(text) {
+    if (!text) return '';
+    // 移除所有类型的编号标记：[G123], {H456}, <G789a>, G123, H456等
+    return text
+        .replace(/[<{[]\s*[GH]\d+[a-zA-Z]?\s*[>}\]]/gi, '')
+        .replace(/\s*[GH]\d+[a-zA-Z]?\s*/gi, ' ')
+        .replace(/[<>{}[\]]/g, '')
+        .replace(/\s+/g, ' ')
+        .trim();
 }
 
 // ==========================================
-// 2. 獲取本地辭典定義 HTML（徹底移除陣列操作，100% 避坑防崩潰版）
+// 2. 核心搜索与构建函数
 // ==========================================
-function getLocalStrongsDefinitionHtml(strongId) {
-  const dict = typeof strongsDict !== 'undefined' ? strongsDict : window.strongsDict;
-  if (!dict || !dict[strongId]) return "";
 
-  const rawText = dict[strongId];
-  let lemma = "";
-  let content = rawText;
-
-  const safeEscape = typeof escapeHtml === 'function' ? escapeHtml : function(str) {
-    return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
-  };
-
-  // 🎯 採用更安全的字串原生截取，不使用 split 陣列，完美防禦任何未知資料格式，徹底解決 TypeError
-  if (typeof rawText === 'string' && rawText.includes('|')) {
-    const pipeIndex = rawText.indexOf('|');
-    const firstPart = rawText.substring(0, pipeIndex).trim();
-    const secondPart = rawText.substring(pipeIndex + 1).trim();
+/**
+ * 构建搜索结果HTML（通用版）
+ * @param {Object} groups - 按Strong编号分组的经文数据
+ * @param {string} keyword - 搜索关键词
+ * @param {boolean} isSimplifiedMode - 是否使用简体中文圣经
+ * @param {Object} options - 额外配置选项
+ */
+function buildSectionsHtml(groups, keyword, isSimplifiedMode, options = {}) {
+    console.log(`%c>>> 搜索关键词: "${keyword}" <<<`, "color: #00bcd4; font-weight: bold; font-size: 14px;");
     
-    lemma = `<span class="dict-lemma" style="color: #4a90e2; font-weight: bold; margin-left: 5px;">${safeEscape(firstPart)}</span>`;
-    content = secondPart;
-  }
+    // 配置选项
+    const config = {
+        maxDefinitionLength: options.maxDefinitionLength || 200,
+        highlightColor: options.highlightColor || '#e74c3c',
+        showTooltips: options.showTooltips !== false,
+        ...options
+    };
+    
+    // 获取字典
+    const dict = typeof strongsDict !== 'undefined' ? strongsDict : window.strongsDict;
+    if (!dict) {
+        console.error("❌ 找不到字典对象 strongsDict！");
+        return `<div class='error-message' style='padding: 20px; text-align: center; color: red;'>
+            错误：未检测到斯特朗原文字典数据。
+        </div>`;
+    }
+    
+    // 🎯 1. 构建动态白名单（通用版）
+    const dynamicStrongList = new Set();
+    const keywordVariants = getChineseVariants(keyword);
+    
+    console.log(`📝 关键词变体:`, keywordVariants);
+    
+    // 遍历字典，匹配所有关键词变体
+    Object.keys(dict).forEach(strongId => {
+        const dictText = dict[strongId];
+        if (typeof dictText === 'string') {
+            // 检查是否包含任何关键词变体
+            const matched = keywordVariants.some(variant => 
+                dictText.includes(variant)
+            );
+            if (matched) {
+                dynamicStrongList.add(strongId.trim().toUpperCase());
+            }
+        }
+    });
+    
+    // 🎯 2. 控制台打印匹配列表
+    const finalListArray = Array.from(dynamicStrongList).sort(sortStrongIds);
+    console.log("%c★============================================================★", "color: #ffeb3b; font-weight: bold;");
+    console.log(`%c 🔍 关键词"${keyword}"匹配的Strong编号 (共 ${finalListArray.length} 个):`, 
+        "color: #fff; background: #2c3e50; padding: 4px 8px; border-radius: 4px; font-weight: bold;");
+    console.log("%c" + JSON.stringify(finalListArray, null, 2), 
+        "color: #2ecc71; background: #1a1a1a; padding: 8px; border-radius: 4px; font-family: monospace; font-size: 12px;");
+    console.log("%c★============================================================★", "color: #ffeb3b; font-weight: bold;");
+    
+    // 🎯 3. 过滤数据
+    const cleanGroups = {};
+    Object.keys(groups).forEach(strongId => {
+        const cleanId = strongId.trim().toUpperCase();
+        let isValid = dynamicStrongList.has(cleanId);
+        
+        // 前缀匹配（处理带后缀的编号）
+        if (!isValid) {
+            isValid = finalListArray.some(validId => 
+                cleanId.startsWith(validId) || validId.startsWith(cleanId)
+            );
+        }
+        
+        if (isValid) {
+            cleanGroups[strongId] = groups[strongId];
+        }
+    });
+    
+    const sortedKeys = Object.keys(cleanGroups).sort(sortStrongIds);
+    
+    if (sortedKeys.length === 0) {
+        console.warn(`⚠️ 未找到包含"${keyword}"的经文`);
+        return `<div class='no-result' style='padding: 30px; text-align: center; color: #999;'>
+            <div style='font-size: 20px; margin-bottom: 10px;'>🔍</div>
+            <div>未找到字典释义包含「${keyword}」的原文编号经文</div>
+            <div style='font-size: 13px; margin-top: 8px; color: #bbb;'>提示：尝试使用不同的关键词或检查拼写</div>
+        </div>`;
+    }
+    
+    // 🎯 4. 构建HTML
+    let html = `<div class='search-results' data-keyword="${safeEscapeHtml(keyword)}">
+        <div class='result-summary' style='padding: 10px; margin-bottom: 15px; background: #f8f9fa; border-radius: 6px;'>
+            找到 <strong>${sortedKeys.length}</strong> 个原文编号，共 <strong>${Object.values(cleanGroups).reduce((sum, arr) => sum + arr.length, 0)}</strong> 节经文
+        </div>`;
+    
+    sortedKeys.forEach(strongId => {
+        let verses = cleanGroups[strongId];
+        
+        // 排序
+        verses.sort((a, b) => {
+            if (a.book_id !== b.book_id) return a.book_id - b.book_id;
+            if (parseInt(a.chapter) !== parseInt(b.chapter)) 
+                return parseInt(a.chapter) - parseInt(b.chapter);
+            return parseInt(a.verse) - parseInt(b.verse);
+        });
+        
+        const definitionHtml = getLocalStrongsDefinitionHtml(strongId, config);
+        const isNewTestament = strongId.trim().toUpperCase().startsWith('G');
+        const ntClass = isNewTestament ? 'nt-group' : '';
+        
+        html += `
+            <div class='group-title ${ntClass}' style='display: flex; justify-content: space-between; align-items: center; 
+                padding: 10px 15px; background: ${isNewTestament ? '#e8f4f8' : '#f5f0e8'}; 
+                border-radius: 6px; margin: 10px 0;'>
+                <div>
+                    <span style='font-weight: bold; font-size: 16px;'>${safeEscapeHtml(strongId)}</span>
+                    ${definitionHtml}
+                </div>
+                <span class='summary-badge' style='background: #6c757d; color: white; padding: 2px 10px; border-radius: 12px; font-size: 12px;'>
+                    ${verses.length} 节
+                </span>
+            </div>
+            <table style='width: 100%; border-collapse: collapse; margin-bottom: 15px;'>
+                <thead>
+                    <tr style='background: #f1f3f5;'>
+                        <th style='width:20%; padding: 8px; text-align: left; border: 1px solid #dee2e6;'>书卷</th>
+                        <th style='width:15%; padding: 8px; text-align: left; border: 1px solid #dee2e6;'>章节</th>
+                        <th style='padding: 8px; text-align: left; border: 1px solid #dee2e6;'>经文内容</th>
+                    </tr>
+                </thead>
+                <tbody>
+        `;
+        
+        verses.forEach(v => {
+            const currentDb = isSimplifiedMode ? bibleSimpData : bibleData;
+            const originalEntry = currentDb ? currentDb.find(s => 
+                parseInt(s.book, 10) === v.book_id && 
+                parseInt(s.chapter, 10) === parseInt(v.chapter, 10) && 
+                parseInt(s.verse, 10) === parseInt(v.verse, 10)
+            ) : null;
+            
+            let highlightedText = "";
+            
+            if (originalEntry && originalEntry.text) {
+                let rawText = cleanVerseText(originalEntry.text);
+                
+                // 高亮所有关键词变体
+                keywordVariants.forEach(variant => {
+                    if (variant && variant.length > 0) {
+                        const escapedVariant = variant.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                        rawText = rawText.replace(
+                            new RegExp(escapedVariant, 'g'), 
+                            `<span style="color: ${config.highlightColor}; font-weight: bold; background: rgba(231, 76, 60, 0.1);">${safeEscapeHtml(variant)}</span>`
+                        );
+                    }
+                });
+                highlightedText = rawText;
+            } else {
+                // 备用方案
+                const safeText = safeEscapeHtml(v.text || '');
+                let text = cleanVerseText(safeText);
+                keywordVariants.forEach(variant => {
+                    if (variant && variant.length > 0) {
+                        const escapedVariant = variant.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                        text = text.replace(
+                            new RegExp(escapedVariant, 'g'), 
+                            `<span style="color: ${config.highlightColor}; font-weight: bold;">${safeEscapeHtml(variant)}</span>`
+                        );
+                    }
+                });
+                highlightedText = text;
+            }
+            
+            html += `
+                <tr>
+                    <td style='padding: 8px; border: 1px solid #dee2e6;'>${safeEscapeHtml(v.book_name)}</td>
+                    <td style='padding: 8px; border: 1px solid #dee2e6;'>${v.chapter}:${v.verse}</td>
+                    <td style='padding: 8px; border: 1px solid #dee2e6; line-height: 1.6;'>${highlightedText}</td>
+                </tr>
+            `;
+        });
+        
+        html += `</tbody></table>`;
+    });
+    
+    html += `</div>`;
+    return html;
+}
 
-  let formattedContent = safeEscape(content).replace(/\n/g, '<br>');
+// ==========================================
+// 3. 字典定义HTML生成（通用版）
+// ==========================================
 
-  if (formattedContent.length > 150) {
-    formattedContent = formattedContent.substring(0, 150) + "...";
-  }
-
-  return `
-    <div class="strongs-tooltip" style="display: inline-block; margin-left: 10px; position: relative; font-size: 14px;">
-      <span class="tooltip-trigger" style="cursor: pointer; background: #eef2f7; padding: 2px 6px; border-radius: 4px; color: #555; border: 1px solid #ddd;">ℹ️ 字典定義</span>
-      <div class="tooltip-content" style="display: none; position: absolute; left: 0; top: 25px; background: white; border: 1px solid #ccc; padding: 10px; width: 320px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); z-index: 999; border-radius: 6px; font-weight: normal; color: #333; text-align: left; line-height: 1.4;">
-        <div class="dict-header" style="border-bottom: 1px solid #eee; padding-bottom: 5px; margin-bottom: 5px; font-weight: bold; color: #000;">
-          ${safeEscape(strongId)} ${lemma}
+function getLocalStrongsDefinitionHtml(strongId, config = {}) {
+    const dict = typeof strongsDict !== 'undefined' ? strongsDict : window.strongsDict;
+    if (!dict || !dict[strongId]) return "";
+    
+    const rawText = dict[strongId];
+    let lemma = "";
+    let content = rawText;
+    const maxLen = config.maxDefinitionLength || 200;
+    
+    // 解析 "词源|释义" 格式
+    if (typeof rawText === 'string' && rawText.includes('|')) {
+        const pipeIndex = rawText.indexOf('|');
+        const firstPart = rawText.substring(0, pipeIndex).trim();
+        const secondPart = rawText.substring(pipeIndex + 1).trim();
+        
+        lemma = `<span class="dict-lemma" style="color: #4a90e2; font-weight: bold; margin-left: 5px;">
+            ${safeEscapeHtml(firstPart)}
+        </span>`;
+        content = secondPart;
+    }
+    
+    let formattedContent = safeEscapeHtml(content).replace(/\n/g, '<br>');
+    
+    // 截断过长内容
+    if (formattedContent.length > maxLen) {
+        formattedContent = formattedContent.substring(0, maxLen) + "...";
+    }
+    
+    if (!config.showTooltips) {
+        return `<span style="margin-left: 8px; font-size: 13px; color: #666;">${formattedContent}</span>`;
+    }
+    
+    return `
+        <div class="strongs-tooltip" style="display: inline-block; margin-left: 8px; position: relative; font-size: 13px;">
+            <span class="tooltip-trigger" style="cursor: help; background: #e9ecef; padding: 2px 8px; border-radius: 4px; color: #495057; border: 1px solid #ced4da; font-size: 12px;">
+                📖 定义
+            </span>
+            <div class="tooltip-content" style="display: none; position: absolute; left: 0; top: 28px; 
+                background: white; border: 1px solid #dee2e6; padding: 12px; width: 340px; 
+                box-shadow: 0 4px 12px rgba(0,0,0,0.15); z-index: 1000; border-radius: 8px; 
+                font-weight: normal; color: #212529; text-align: left; line-height: 1.5;">
+                <div class="dict-header" style="border-bottom: 2px solid #e9ecef; padding-bottom: 6px; margin-bottom: 6px; 
+                    font-weight: bold; color: #000; font-size: 14px;">
+                    ${safeEscapeHtml(strongId)} ${lemma}
+                </div>
+                <div class="dict-body" style="max-height: 250px; overflow-y: auto; font-size: 13px; color: #333;">
+                    ${formattedContent}
+                </div>
+            </div>
         </div>
-        <div class="dict-body" style="max-height: 200px; overflow-y: auto; font-size: 13px;">
-          ${formattedContent}
-        </div>
-      </div>
-    </div>
-  `;
+    `;
+}
+
+// ==========================================
+// 4. 初始化Tooltip交互（可选）
+// ==========================================
+
+document.addEventListener('DOMContentLoaded', function() {
+    // 委托事件监听所有tooltip触发器
+    document.addEventListener('mouseenter', function(e) {
+        const trigger = e.target.closest('.tooltip-trigger');
+        if (trigger) {
+            const tooltip = trigger.closest('.strongs-tooltip');
+            if (tooltip) {
+                const content = tooltip.querySelector('.tooltip-content');
+                if (content) {
+                    content.style.display = 'block';
+                }
+            }
+        }
+    }, true);
+    
+    document.addEventListener('mouseleave', function(e) {
+        const trigger = e.target.closest('.tooltip-trigger');
+        if (trigger) {
+            const tooltip = trigger.closest('.strongs-tooltip');
+            if (tooltip) {
+                const content = tooltip.querySelector('.tooltip-content');
+                if (content) {
+                    content.style.display = 'none';
+                }
+            }
+        }
+    }, true);
+});
+
+// 导出函数以便在其他模块中使用
+if (typeof module !== 'undefined' && module.exports) {
+    module.exports = {
+        buildSectionsHtml,
+        getLocalStrongsDefinitionHtml,
+        getChineseVariants,
+        cleanVerseText,
+        sortStrongIds
+    };
 }
