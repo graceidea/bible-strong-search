@@ -2,89 +2,82 @@
 // 1. 生成表格 HTML 與精準編號染色邏輯（徹底去括號、去編號、純淨文字版）
 // ==========================================
 function buildSectionsHtml(groups, keyword, isSimplifiedMode) {
-    let html = "";
-    const sortedKeys = Object.keys(groups).sort(sortStrongIds);
+  let html = "";
+  const sortedKeys = Object.keys(groups).sort(sortStrongIds);
 
-    sortedKeys.forEach(strongId => {
-        let verses = groups[strongId];
-
-        // 按卷、章、節排序
-        verses.sort((a, b) => {
-            if (a.book_id !== b.book_id) return a.book_id - b.book_id;
-            if (parseInt(a.chapter, 10) !== parseInt(b.chapter, 10)) return parseInt(a.chapter, 10) - parseInt(b.chapter, 10);
-            return parseInt(a.verse, 10) - parseInt(b.verse, 10);
-        });
-
-        const definitionHtml = getLocalStrongsDefinitionHtml(strongId);
-        const isNewTestament = strongId.trim().toUpperCase().startsWith('G');
-        const ntClass = isNewTestament ? 'nt-group' : '';
-
-        html += `
-        <div class='group-title ${ntClass}'>
-            <span>原文編號: <strong>${strongId}</strong>${definitionHtml}</span>
-            <span class="summary-badge">共 ${verses.length} 節</span>
-        </div>
-        <table>
-            <thead>
-                <tr><th style='width:25%'>書卷</th><th style='width:20%'>章節</th><th>經文內容</th></tr>
-            </thead>
-            <tbody>
-        `;
-
-        verses.forEach(v => {
-            // 保留你原有的設計：精確對齊簡繁體資料庫
-            const currentDb = isSimplifiedMode ? bibleSimpData : bibleData;
-            
-            const originalEntry = currentDb.find(s => 
-                parseInt(s.book, 10) === v.book_id && 
-                parseInt(s.chapter, 10) === parseInt(v.chapter, 10) && 
-                parseInt(s.verse, 10) === parseInt(v.verse, 10)
-            );
-            
-            let highlightedText = "";
-
-            if (originalEntry && originalEntry.text) {
-                let rawText = originalEntry.text;
-
-                // 轉義目前的 strongId 以便安全放入正則
-                const escapedStrong = strongId.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
-
-                // 🎯 1. 精準攔截：將後面緊跟著「當前編號」的關鍵字標記為【紅色】
-                // 允許中間有空格或括號，例如：膀臂 {H68} 或 膀臂<H68>
-                const redRegex = new RegExp(`(${keyword})(?=[\\s<{|\\[]*${escapedStrong})`, "gi");
-                rawText = rawText.replace(redRegex, "__RED_KEYWORD__");
-
-                // 🎯 2. 常規攔截：將其他所有的關鍵字標記為【黃色】
-                const yellowRegex = new RegExp(keyword, "g");
-                rawText = rawText.replace(yellowRegex, "__YELLOW_KEYWORD__");
-
-                // 🎯 3. 大掃除：徹底蒸發經文裡的所有原文編號與殘留括號
-                rawText = rawText.replace(/[<{ ]*[GH]\d+[a-zA-Z]?[>} ]*/gi, '');
-                rawText = rawText.replace(/[<>{}[\]]/g, '');
-
-                // 🎯 4. 還原標籤：將標記替換成真正的網頁顏色
-                rawText = rawText.split("__RED_KEYWORD__").join(`<span style="color: red; font-weight: bold;">${keyword}</span>`);
-                rawText = rawText.split("__YELLOW_KEYWORD__").join(`<span class="hl">${keyword}</span>`);
-
-                highlightedText = rawText;
-            } else {
-                const safeText = typeof escapeHtml === 'function' ? escapeHtml(v.text) : v.text;
-                highlightedText = safeText.split(keyword).join(`<span class='hl'>${keyword}</span>`);
-            }
-
-            html += `
-            <tr>
-                <td>${v.book_name}</td>
-                <td>${v.chapter}:${v.verse}</td>
-                <td>${highlightedText}</td>
-            </tr>
-            `;
-        });
-
-        html += `</tbody></table><hr class='group-divider'>`;
+  sortedKeys.forEach(strongId => {
+    let verses = groups[strongId];
+    
+    // 按卷、章、節排序
+    verses.sort((a, b) => {
+      if (a.book_id !== b.book_id) return a.book_id - b.book_id;
+      if (parseInt(a.chapter, 10) !== parseInt(b.chapter, 10)) return parseInt(a.chapter, 10) - parseInt(b.chapter, 10);
+      return parseInt(a.verse, 10) - parseInt(b.verse, 10);
     });
 
-    return html;
+    const definitionHtml = getLocalStrongsDefinitionHtml(strongId);
+    const isNewTestament = strongId.trim().toUpperCase().startsWith('G');
+    const ntClass = isNewTestament ? 'nt-group' : '';
+
+    html += `
+      <div class='group-title ${ntClass}'>
+        <span>原文編號: <strong>${strongId}</strong>${definitionHtml}</span>
+        <span class="summary-badge">共 ${verses.length} 節</span>
+      </div>
+      <table>
+        <thead>
+          <tr><th style='width:25%'>書卷</th><th style='width:20%'>章節</th><th>經文內容</th></tr>
+        </thead>
+        <tbody>
+    `;
+
+    // 🎯 核心修改就在這裏：遍歷並渲染每一行經文
+    verses.forEach(v => {
+      const currentDb = isSimplifiedMode ? bibleSimpData : bibleData;
+      const originalEntry = currentDb ? currentDb.find(s => 
+        parseInt(s.book, 10) === v.book_id && 
+        parseInt(s.chapter, 10) === parseInt(v.chapter, 10) && 
+        parseInt(s.verse, 10) === parseInt(v.verse, 10)
+      ) : null;
+
+      let highlightedText = "";
+      
+      if (originalEntry && originalEntry.text) {
+        let rawText = originalEntry.text;
+        const escapedStrong = strongId.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+
+        // 🎯 1. 超精準攔截：只有當「愛」字後面緊跟當前表格的 StrongId 時，才打上紅色標記
+        const redRegex = new RegExp(`(${keyword})(?=[\\s<{|\\[]*${escapedStrong}\\b)`, "gi");
+        rawText = rawText.replace(redRegex, "__RED_KEYWORD__");
+
+        // 🎯 2. 大大掃除：徹底蒸發經文裡的所有原文編號與殘留括號
+        // （這裡刪除了原本的黃色常規高亮，所以其他不屬於當前編號的字會保持原樣不變色）
+        rawText = rawText.replace(/[<{ ]*[GH]\d+[a-zA-Z]?[>} ]*/gi, '');
+        rawText = rawText.replace(/[<>{}[\]]/g, '');
+
+        // 🎯 3. 還原標籤：將標記替換成真正的紅色加粗樣式
+        rawText = rawText.split("__RED_KEYWORD__").join(`<span style="color: red; font-weight: bold;">${keyword}</span>`);
+        highlightedText = rawText;
+        
+      } else {
+        // Fallback 安全回退機制：如果找不到帶編號的原始資料庫，僅將關鍵字染紅
+        const safeText = typeof escapeHtml === 'function' ? escapeHtml(v.text) : v.text;
+        highlightedText = safeText.split(keyword).join(`<span style="color: red; font-weight: bold;">${keyword}</span>`);
+      }
+
+      html += `
+        <tr>
+          <td>${v.book_name}</td>
+          <td>${v.chapter}:${v.verse}</td>
+          <td>${highlightedText}</td>
+        </tr>
+      `;
+    });
+
+    html += `</tbody></table><hr class='group-divider'>`;
+  });
+
+  return html;
 }
 
 
