@@ -1,15 +1,21 @@
 // ==========================================
-// 1. 生成表格 HTML 與精準編號染色邏輯（徹底剔除無關編號、極致純淨版）
+// 1. 生成表格 HTML 與精準編號染色邏輯（100% 安全、剔除無關編號、絕不死循環版）
 // ==========================================
 function buildSectionsHtml(groups, keyword, isSimplifiedMode) {
   let html = "";
   
-  // 🎯 1. 深度清洗與過濾：只保留真正與關鍵字綁定的 StrongId 和經文
+  // 🎯 1. 建立一個乾淨的儲存容器
   const cleanGroups = {};
   
+  // 遍歷所有原始強編號
   Object.keys(groups).forEach(strongId => {
     const verses = groups[strongId];
     const validVerses = [];
+    const escapedStrong = strongId.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+    
+    // 構造一個局部無死循環的安全正則：只負責提取該 strongId 左邊的中文詞組
+    // 去掉了全球匹配修飾符 'g'，杜絕 lastIndex 導致的死循環
+    const matchRegex = new RegExp(`([^\\x00-\\xff\\s<{|\\[]*)(?=[\\s<{|\\[]*${escapedStrong}\\b)`, "i");
 
     verses.forEach(v => {
       const currentDb = isSimplifiedMode ? bibleSimpData : bibleData;
@@ -20,32 +26,33 @@ function buildSectionsHtml(groups, keyword, isSimplifiedMode) {
       ) : null;
 
       if (originalEntry && originalEntry.text) {
-        let rawText = originalEntry.text;
-        const escapedStrong = strongId.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
-
-        // 核心算法：反向追蹤目前編號左邊的中文詞組
-        const advancedRegex = new RegExp(`([^\\x00-\\xff\\s<{|\\[]*${keyword}[^\\x00-\\xff\\s<{|\\[]*)(?=[\\s<{|\\[]*${escapedStrong}\\b)`, "gi");
+        const rawText = originalEntry.text;
+        const matchResult = rawText.match(matchRegex);
         
-        // 只有當前強編號左側的詞組包含關鍵字（如“愛”、“愛心”、“你所愛的人”）時，才視為有效
-        if (advancedRegex.test(rawText)) {
+        // 只要當前強編號左側緊鄰的中文詞組（例如 [0] 是 "你所愛的人"、"愛心" 等）確實包含關鍵字
+        if (matchResult && matchResult[0] && matchResult[0].includes(keyword)) {
           validVerses.push(v);
         }
       } else {
-        // Fallback 安全回退：如果連原始帶編號數據庫都沒有，但純文字包含關鍵字，保守保留
+        // Fallback 安全回退：若無編號數據庫，只要純文字包含關鍵字就保留
         if (v.text && v.text.includes(keyword)) {
           validVerses.push(v);
         }
       }
     });
 
-    // 🎯 只有當這個原文編號下，存在真正與“愛”相關的經文時，才保留這個 StrongId
+    // 🎯 只有當這個原文編號下，存在真正與關鍵字綁定的經文時，才保留這個 StrongId 表格
     if (validVerses.length > 0) {
       cleanGroups[strongId] = validVerses;
     }
   });
 
-  // 🎯 2. 使用清洗後的數據進行排序與渲染
+  // 🎯 2. 使用安全清洗後的數據進行排序與渲染
   const sortedKeys = Object.keys(cleanGroups).sort(sortStrongIds);
+
+  if (sortedKeys.length === 0) {
+    return "<div class='no-result' style='padding: 20px; text-align: center; color: #999;'>未找到符合原文綁定條件的經文。</div>";
+  }
 
   sortedKeys.forEach(strongId => {
     let verses = cleanGroups[strongId];
@@ -86,18 +93,23 @@ function buildSectionsHtml(groups, keyword, isSimplifiedMode) {
       if (originalEntry && originalEntry.text) {
         let rawText = originalEntry.text;
         const escapedStrong = strongId.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
-        const advancedRegex = new RegExp(`([^\\x00-\\xff\\s<{|\\[]*${keyword}[^\\x00-\\xff\\s<{|\\[]*)(?=[\\s<{|\\[]*${escapedStrong}\\b)`, "gi");
         
-        // 執行精準高亮替換
-        rawText = rawText.replace(advancedRegex, function(match) {
-          return `__RED_START__${match}__RED_END__`;
-        });
+        // 渲染時使用非全局的精準匹配替換，配合循環確保安全
+        const renderRegex = new RegExp(`([^\\x00-\\xff\\s<{|\\[]*${keyword}[^\\x00-\\xff\\s<{|\\[]*)(?=[\\s<{|\\[]*${escapedStrong}\\b)`, "i");
+        
+        // 使用 while 替換，安全無感，絕不卡死
+        let match;
+        while ((match = rawText.match(renderRegex)) !== null) {
+          const matchedText = match[1];
+          // 臨時標記防二次重複匹配
+          rawText = rawText.replace(renderRegex, `__RED_START__${matchedText}__RED_END__`);
+        }
 
-        // 大掃除
+        // 大掃除：徹底蒸發經文裡的所有原文編號與殘留括號
         rawText = rawText.replace(/[<{ ]*[GH]\d+[a-zA-Z]?[>} ]*/gi, '');
         rawText = rawText.replace(/[<>{}[\]]/g, '');
 
-        // 還原標籤
+        // 還原紅色標籤
         rawText = rawText.split("__RED_START__").join(`<span style="color: red; font-weight: bold;">`);
         rawText = rawText.split("__RED_END__").join(`</span>`);
         highlightedText = rawText;
