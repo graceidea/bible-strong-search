@@ -1,89 +1,62 @@
 // ==========================================
-// 1. 生成表格 HTML 與精準編號染色邏輯（密集日誌調試版：揪出死循環）
+// 1. 生成表格 HTML 與精準編號染色邏輯（徹底剔除無關編號、純淨文字版）
 // ==========================================
 function buildSectionsHtml(groups, keyword, isSimplifiedMode) {
-  console.log("%c>>> 进入 buildSectionsHtml 函数 <<<", "color: green; font-weight: bold; font-size: 14px;");
-  console.log("-> 传入关键字 (keyword):", keyword);
-  console.log("-> 传入的分组键 (StrongIds):", Object.keys(groups));
-
   let html = "";
-  const cleanGroups = {};
   
-  // 🎯 阶段 1：深度清洗与数据过滤
-  console.log("%c【开始阶段 1：清洗无关编号】", "color: #ff9900; font-weight: bold;");
+  // 🎯 1. 深度清洗與數據過濾：完全使用安全字串拆分
+  const cleanGroups = {};
   
   Object.keys(groups).forEach(strongId => {
     const verses = groups[strongId];
     const validVerses = [];
     const targetStrong = strongId.trim().toUpperCase();
 
-    console.log(` -> [开始检查编号] ${strongId} | 该编号下共有经文 ${verses.length} 节`);
-
-    verses.forEach((v, idx) => {
-      console.log(`    -> [章节循环] 正在处理第 ${idx + 1}/${verses.length} 节: ${v.book_name} ${v.chapter}:${v.verse}`);
-      
+    verses.forEach(v => {
       const currentDb = isSimplifiedMode ? bibleSimpData : bibleData;
-      
-      if (!currentDb) {
-        console.error("    🚨 [错误] 找不到对应的圣经数据库变量(bibleSimpData/bibleData)");
-        return;
-      }
-
-      const originalEntry = currentDb.find(s => 
+      const originalEntry = currentDb ? currentDb.find(s => 
         parseInt(s.book, 10) === v.book_id && 
         parseInt(s.chapter, 10) === parseInt(v.chapter, 10) && 
         parseInt(s.verse, 10) === parseInt(v.verse, 10)
-      );
+      ) : null;
 
       if (originalEntry && originalEntry.text) {
         const rawText = originalEntry.text;
         const upperText = rawText.toUpperCase();
         
-        console.log(`    -> 数据库带编号原文: "${rawText}"`);
-        
+        // 用目前強編號作為刀刃把經文切開
         if (upperText.includes(targetStrong)) {
-          console.log(`    -> [命中编号] 原文包含目标编号 ${targetStrong}，开始执行字串切分...`);
-          
           const parts = upperText.split(targetStrong);
-          const leftSegment = parts[0]; 
           
-          console.log(`    -> 切分后的左侧片段: "${leftSegment}"`);
+          // 拿到強編號左側的所有文字片段
+          const leftSegment = parts[0] || "";
           
+          // 提取左側片段最後 8 個字元（足以容納 "你所愛的人"、"愛心" 等中文詞組跨度）
           const tailText = leftSegment.substring(Math.max(0, leftSegment.length - 8));
-          console.log(`    -> 提取左侧末尾段落(限长8字): "${tailText}"`);
-
+          
+          // 只有當前強編號正左方的中文詞組確實包含關鍵字（如“愛”）時，才視為有效
           if (tailText.includes(keyword)) {
-            console.log(`    ✅ [有效经文] 该编号左侧包含关键字 "${keyword}"，保留此节经文`);
             validVerses.push(v);
-          } else {
-            console.log(`    ❌ [剔除经文] 该编号左侧不包含关键字 "${keyword}"，放弃此节`);
           }
-        } else {
-          console.log(`    ⚠️ [编号未对齐] 传入了该编号但在原文中未找到对齐节点`);
         }
       } else {
-        console.log(`    ⚠️ [无编号数据] 触发 Fallback 保守保留校验`);
+        // Fallback 安全回退
         if (v.text && v.text.includes(keyword)) {
           validVerses.push(v);
         }
       }
     });
 
+    // 🎯 只有當這個原文編號下，存在真正與“愛”字詞組綁定的經文時，才保留這個 StrongId 表格
     if (validVerses.length > 0) {
-      console.log(` 🏆 [编号处理完毕] 编号 ${strongId} 通过清洗，有效经文数: ${validVerses.length}`);
       cleanGroups[strongId] = validVerses;
-    } else {
-      console.log(` 🗑️ [编号完全剔除] 编号 ${strongId} 下无任何相关字绑定，彻底丢弃此表格`);
     }
   });
 
-  // 🎯 阶段 2：进行排序与网页渲染
-  console.log("%c【开始阶段 2：数据渲染排版】", "color: #ff9900; font-weight: bold;");
+  // 🎯 2. 使用安全清洗後的純淨數據進行排序與網頁渲染
   const sortedKeys = Object.keys(cleanGroups).sort(sortStrongIds);
-  console.log("-> 最终保留并参与渲染的 StrongIds:", sortedKeys);
 
   if (sortedKeys.length === 0) {
-    console.log("-> 渲染结果: 没有任何有效结果");
     return "<div class='no-result' style='padding: 20px; text-align: center; color: #999;'>未找到符合原文綁定條件的經文。</div>";
   }
 
@@ -91,8 +64,7 @@ function buildSectionsHtml(groups, keyword, isSimplifiedMode) {
     let verses = cleanGroups[strongId];
     const targetStrong = strongId.trim().toUpperCase();
     
-    console.log(` -> [开始渲染表格] 原文编号: ${strongId}`);
-
+    // 按卷、章、節排序
     verses.sort((a, b) => {
       if (a.book_id !== b.book_id) return a.book_id - b.book_id;
       if (parseInt(a.chapter, 10) !== parseInt(b.chapter, 10)) return parseInt(a.chapter, 10) - parseInt(b.chapter, 10);
@@ -115,8 +87,7 @@ function buildSectionsHtml(groups, keyword, isSimplifiedMode) {
         <tbody>
     `;
 
-    verses.forEach((v, idx) => {
-      console.log(`    -> [渲染经文行] ${idx + 1}/${verses.length}: ${v.book_name}`);
+    verses.forEach(v => {
       const currentDb = isSimplifiedMode ? bibleSimpData : bibleData;
       const originalEntry = currentDb ? currentDb.find(s => 
         parseInt(s.book, 10) === v.book_id && 
@@ -132,39 +103,30 @@ function buildSectionsHtml(groups, keyword, isSimplifiedMode) {
         
         if (upperText.includes(targetStrong)) {
           const startIndex = upperText.indexOf(targetStrong);
+          
           const leftText = rawText.substring(0, startIndex);
           const rightText = rawText.substring(startIndex);
           
-          console.log("       -> [开始指针对齐定位]");
+          // 迴圈往前追蹤，直到遇到非漢字字元（如 <, {, 空格），精準孤立出緊鄰的中文詞組
           let wordStart = leftText.length - 1;
-          
-          // 🛠️ 重点防御：防止无限循环的回溯指针防御锁
-          let loopCount = 0;
           while (wordStart >= 0 && /[^\x00-\xff]/.test(leftText[wordStart])) {
             wordStart--;
-            loopCount++;
-            if (loopCount > 200) { 
-              console.error("       🚨 [指针死循环预警] 回溯指针打破上限！"); 
-              break; 
-            }
           }
           wordStart++; 
           
           const targetWord = leftText.substring(wordStart);
           const remainLeft = leftText.substring(0, wordStart);
           
-          console.log(`       -> 定位到属于当前编号的中文词组为: "${targetWord}"`);
-
           if (targetWord.includes(keyword)) {
             rawText = remainLeft + `__RED_START__${targetWord}__RED_END__` + rightText;
           }
         }
 
-        console.log("       -> [清洗正则] 执行非高亮大清除...");
-        // 🎯 重点防御：检查是不是原有的全局大清洗正则卡死
+        // 大掃除：徹底蒸發經文裡的所有原文編號與殘留括號
         rawText = rawText.replace(/[<{ ]*[GH]\d+[a-zA-Z]?[>} ]*/gi, '');
         rawText = rawText.replace(/[<>{}[\]]/g, '');
 
+        // 還原紅色標籤
         rawText = rawText.split("__RED_START__").join(`<span style="color: red; font-weight: bold;">`);
         rawText = rawText.split("__RED_END__").join(`</span>`);
         highlightedText = rawText;
@@ -186,12 +148,11 @@ function buildSectionsHtml(groups, keyword, isSimplifiedMode) {
     html += `</tbody></table><hr class='group-divider'>`;
   });
 
-  console.log("%c<<< buildSectionsHtml 渲染完毕，安全输出 >>>", "color: green; font-weight: bold;");
   return html;
 }
 
 // ==========================================
-// 2. 獲取本地辭典定義 HTML
+// 2. 獲取本地辭典定義 HTML（已完美修復 parts.trim 陣列類型 Bug）
 // ==========================================
 function getLocalStrongsDefinitionHtml(strongId) {
   const dict = typeof strongsDict !== 'undefined' ? strongsDict : window.strongsDict;
@@ -205,6 +166,7 @@ function getLocalStrongsDefinitionHtml(strongId) {
     return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
   };
 
+  // 🎯 核心修復：正確讀取 parts[0] 字串後再執行 trim()
   if (rawText.includes('|')) {
     const parts = rawText.split('|');
     lemma = `<span class="dict-lemma" style="color: #4a90e2; font-weight: bold; margin-left: 5px;">${safeEscape(parts[0].trim())}</span>`;
