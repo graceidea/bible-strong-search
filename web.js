@@ -1,12 +1,54 @@
 // ==========================================
-// 1. 生成表格 HTML 與精準編號染色邏輯（帶有偵錯輸出 Log 版）
+// 1. 生成表格 HTML 與精準編號染色邏輯（徹底剔除無關編號、極致純淨版）
 // ==========================================
 function buildSectionsHtml(groups, keyword, isSimplifiedMode) {
   let html = "";
-  const sortedKeys = Object.keys(groups).sort(sortStrongIds);
+  
+  // 🎯 1. 深度清洗與過濾：只保留真正與關鍵字綁定的 StrongId 和經文
+  const cleanGroups = {};
+  
+  Object.keys(groups).forEach(strongId => {
+    const verses = groups[strongId];
+    const validVerses = [];
+
+    verses.forEach(v => {
+      const currentDb = isSimplifiedMode ? bibleSimpData : bibleData;
+      const originalEntry = currentDb ? currentDb.find(s => 
+        parseInt(s.book, 10) === v.book_id && 
+        parseInt(s.chapter, 10) === parseInt(v.chapter, 10) && 
+        parseInt(s.verse, 10) === parseInt(v.verse, 10)
+      ) : null;
+
+      if (originalEntry && originalEntry.text) {
+        let rawText = originalEntry.text;
+        const escapedStrong = strongId.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+
+        // 核心算法：反向追蹤目前編號左邊的中文詞組
+        const advancedRegex = new RegExp(`([^\\x00-\\xff\\s<{|\\[]*${keyword}[^\\x00-\\xff\\s<{|\\[]*)(?=[\\s<{|\\[]*${escapedStrong}\\b)`, "gi");
+        
+        // 只有當前強編號左側的詞組包含關鍵字（如“愛”、“愛心”、“你所愛的人”）時，才視為有效
+        if (advancedRegex.test(rawText)) {
+          validVerses.push(v);
+        }
+      } else {
+        // Fallback 安全回退：如果連原始帶編號數據庫都沒有，但純文字包含關鍵字，保守保留
+        if (v.text && v.text.includes(keyword)) {
+          validVerses.push(v);
+        }
+      }
+    });
+
+    // 🎯 只有當這個原文編號下，存在真正與“愛”相關的經文時，才保留這個 StrongId
+    if (validVerses.length > 0) {
+      cleanGroups[strongId] = validVerses;
+    }
+  });
+
+  // 🎯 2. 使用清洗後的數據進行排序與渲染
+  const sortedKeys = Object.keys(cleanGroups).sort(sortStrongIds);
 
   sortedKeys.forEach(strongId => {
-    let verses = groups[strongId];
+    let verses = cleanGroups[strongId];
     
     // 按卷、章、節排序
     verses.sort((a, b) => {
@@ -41,25 +83,13 @@ function buildSectionsHtml(groups, keyword, isSimplifiedMode) {
 
       let highlightedText = "";
       
-      // 🎯 [偵錯日誌] 輸出目前檢查的經文節數
-      console.log(`%c【正在調試】${v.book_name} ${v.chapter}:${v.verse} | 當前區塊原文編號: ${strongId}`, "color: #4a90e2; font-weight: bold;");
-
       if (originalEntry && originalEntry.text) {
         let rawText = originalEntry.text;
         const escapedStrong = strongId.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
-
-        // 🎯 [偵錯日誌] 輸出資料庫裡未清洗前的原始文字（帶有強編號的模樣）
-        console.log("-> 數據庫原始文本(帶編號):", rawText);
-
-        // 升級版超精準攔截正則
-        const redRegex = new RegExp(`((?:${keyword}心|${keyword}))(?=[\\s<{|\\[]*${escapedStrong}\\b)`, "gi");
+        const advancedRegex = new RegExp(`([^\\x00-\\xff\\s<{|\\[]*${keyword}[^\\x00-\\xff\\s<{|\\[]*)(?=[\\s<{|\\[]*${escapedStrong}\\b)`, "gi");
         
-        // 🎯 [偵錯日誌] 看看正則表達式到底有沒有成功撈到東西
-        const matches = rawText.match(redRegex);
-        console.log("-> 正則表達式匹配到的文字結果:", matches);
-
-        rawText = rawText.replace(redRegex, function(match) {
-          console.log("-> [成功攔截] 進入替換回呼函數，匹配到的目標是:", match);
+        // 執行精準高亮替換
+        rawText = rawText.replace(advancedRegex, function(match) {
           return `__RED_START__${match}__RED_END__`;
         });
 
@@ -72,21 +102,9 @@ function buildSectionsHtml(groups, keyword, isSimplifiedMode) {
         rawText = rawText.split("__RED_END__").join(`</span>`);
         highlightedText = rawText;
         
-        console.log("-> 最終生成的 HTML 經文內容:", highlightedText);
-        
       } else {
-        // 🎯 [偵錯日誌] 如果進入了這裏，代表在帶編號數據庫(bibleData)中根本找不到這一節！
-        console.warn(`-> [警告] 無法在帶編號數據庫中找到該節，觸發了 Fallback 安全回退機制。`);
-        
         const safeText = typeof escapeHtml === 'function' ? escapeHtml(v.text) : v.text;
-        console.log("-> 回退機制的輸入純文字:", safeText);
-
-        if (safeText.includes(`${keyword}心`)) {
-          console.log(`-> [回退成功] 純文字中包含「${keyword}心」，執行整體切換`);
-          highlightedText = safeText.split(`${keyword}心`).join(`<span style="color: red; font-weight: bold;">${keyword}</span>`);
-        } else {
-          highlightedText = safeText.split(keyword).join(`<span style="color: red; font-weight: bold;">${keyword}</span>`);
-        }
+        highlightedText = safeText.split(keyword).join(`<span style="color: red; font-weight: bold;">${keyword}</span>`);
       }
 
       html += `
@@ -121,7 +139,7 @@ function getLocalStrongsDefinitionHtml(strongId) {
 
   if (rawText.includes('|')) {
     const parts = rawText.split('|');
-    lemma = `<span class="dict-lemma" style="color: #4a90e2; font-weight: bold; margin-left: 5px;">${safeEscape(parts[0].trim())}</span>`;
+    lemma = `<span class="dict-lemma" style="color: #4a90e2; font-weight: bold; margin-left: 5px;">${safeEscape(parts.trim())}</span>`;
     content = parts.slice(1).join('|').trim();
   }
 
@@ -145,101 +163,3 @@ function getLocalStrongsDefinitionHtml(strongId) {
     </div>
   `;
 }
-
-
-// ==========================================
-// 2. 獲取本地辭典定義 HTML（與純文字結構相容）
-// ==========================================
-function getLocalStrongsDefinitionHtml(strongId) {
-  const dict = typeof strongsDict !== 'undefined' ? strongsDict : window.strongsDict;
-  if (!dict || !dict[strongId]) return "";
-
-  const rawText = dict[strongId];
-  let lemma = "";
-  let content = rawText;
-
-  const safeEscape = typeof escapeHtml === 'function' ? escapeHtml : function(str) {
-    return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
-  };
-
-  // 解析 "Α | 意義: ..." 結構
-  if (rawText.includes('|')) {
-    const parts = rawText.split('|');
-    lemma = `<span class="dict-lemma" style="color: #4a90e2; font-weight: bold; margin-left: 5px;">${safeEscape(parts[0].trim())}</span>`;
-    content = parts.slice(1).join('|').trim();
-  }
-
-  let formattedContent = safeEscape(content).replace(/\n/g, '<br>');
-
-  if (formattedContent.length > 150) {
-    formattedContent = formattedContent.substring(0, 150) + "...";
-  }
-
-  return `
-    <div class="strongs-tooltip" style="display: inline-block; margin-left: 10px; position: relative; font-size: 14px;">
-      <span class="tooltip-trigger" style="cursor: pointer; background: #eef2f7; padding: 2px 6px; border-radius: 4px; color: #555; border: 1px solid #ddd;">ℹ️ 字典定義</span>
-      <div class="tooltip-content" style="display: none; position: absolute; left: 0; top: 25px; background: white; border: 1px solid #ccc; padding: 10px; width: 320px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); z-index: 999; border-radius: 6px; font-weight: normal; color: #333; text-align: left; line-height: 1.4;">
-        <div class="dict-header" style="border-bottom: 1px solid #eee; padding-bottom: 5px; margin-bottom: 5px; font-weight: bold; color: #000;">
-          ${safeEscape(strongId)} ${lemma}
-        </div>
-        <div class="dict-body" style="max-height: 200px; overflow-y: auto; font-size: 13px;">
-          ${formattedContent}
-        </div>
-      </div>
-    </div>
-  `;
-}
-
-
-
-// ========================================== //
-// 2. 獲取本地辭典定義 HTML （已修復純文字結構相容性）
-// ========================================== //
-function getLocalStrongsDefinitionHtml(strongId) {
-    // 兼容跨文件调用：如果 main.js 里的变量名是 strongsDict，而当前作用域找不到，尝试去 window 找
-    const dict = typeof strongsDict !== 'undefined' ? strongsDict : window.strongsDict;
-    
-    if (!dict || !dict[strongId]) return "";
-
-    // 拿到原始的純文字字串
-    const rawText = dict[strongId]; 
-    
-    let lemma = "";
-    let content = rawText;
-
-    // 安全處理：確保有些環境下有自訂的 escapeHtml 函數
-    const safeEscape = typeof escapeHtml === 'function' ? escapeHtml : function(str) {
-        return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
-    };
-
-    // 🎯 核心解析邏輯：將 "Α | 意義: ..." 用「|」切開
-    if (rawText.includes('|')) {
-        const parts = rawText.split('|');
-        lemma = `<span class="dict-lemma" style="color: #4a90e2; font-weight: bold; margin-left: 5px;">${safeEscape(parts[0].trim())}</span>`;
-        content = parts.slice(1).join('|').trim(); // 剩下一整段都是定義
-    }
-
-    // 將字串中的 \n 換行符號轉為網頁的 <br> 標籤
-    let formattedContent = safeEscape(content).replace(/\n/g, '<br>');
-
-    // 字數太長時做截斷（保留 150 字），避免彈窗撐爆
-    if (formattedContent.length > 150) {
-        formattedContent = formattedContent.substring(0, 150) + "...";
-    }
-
-    // 返回渲染的 HTML 結構（帶有簡單的樣式，滑鼠移上去或點擊可以查看全貌）
-    return `
-        <div class="strongs-tooltip" style="display: inline-block; margin-left: 10px; position: relative; font-size: 14px;">
-            <span class="tooltip-trigger" style="cursor: pointer; background: #eef2f7; padding: 2px 6px; border-radius: 4px; color: #555; border: 1px solid #ddd;">ℹ️ 字典定義</span>
-            <div class="tooltip-content" style="display: none; position: absolute; left: 0; top: 25px; background: white; border: 1px solid #ccc; padding: 10px; width: 320px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); z-index: 999; border-radius: 6px; font-weight: normal; color: #333; text-align: left; line-height: 1.4;">
-                <div class="dict-header" style="border-bottom: 1px solid #eee; padding-bottom: 5px; margin-bottom: 5px; font-weight: bold; color: #000;">
-                    ${safeEscape(strongId)} ${lemma}
-                </div>
-                <div class="dict-body" style="max-height: 200px; overflow-y: auto; font-size: 13px;">
-                    ${formattedContent}
-                </div>
-            </div>
-        </div>
-    `;
-}
-
