@@ -1,68 +1,119 @@
 // ==========================================
 // 1. 初始化與異步加載三大 JSON 資料庫
 // ==========================================
-window.onload = function() { 
-    document.getElementById('status').innerText = "正在載入聖經資料庫與原文辭典..."; 
+
+// 使用 DOMContentLoaded 而不是 window.onload，更可靠
+document.addEventListener('DOMContentLoaded', function() { 
+    const statusElement = document.getElementById('status');
+    if (statusElement) {
+        statusElement.innerText = "正在載入聖經資料庫與原文辭典...";
+    }
     
     Promise.all([ 
-        fetch('./chinesetrad.json').then(res => { if (!res.ok) throw new Error(); return res.json(); }), 
-        fetch('./chinesesimp.json').then(res => { if (!res.ok) throw new Error(); return res.json(); }), 
-        fetch('./strongs_dict.json').then(res => { if (!res.ok) throw new Error(); return res.json(); }) 
+        fetch('./chinesetrad.json').then(res => { 
+            if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`); 
+            return res.json(); 
+        }), 
+        fetch('./chinesesimp.json').then(res => { 
+            if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`); 
+            return res.json(); 
+        }), 
+        fetch('./strongs_dict.json').then(res => { 
+            if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`); 
+            return res.json(); 
+        }) 
     ]) 
     .then(([bibleTrad, bibleSimp, dict]) => { 
+        // 赋值给全局变量
         bibleData = bibleTrad;      
         bibleSimpData = bibleSimp;  
         strongsDict = dict; 
         
+        console.log(`✅ 數據加載完成: 繁體 ${bibleData.length} 節, 簡體 ${bibleSimpData.length} 節, 字典 ${Object.keys(strongsDict).length} 個詞條`);
+        
+        // 🔥 初始化搜索构建器（新增）
+        initSearchBuilder();
+        
         // 動態填充 66 卷書與範圍選項到選單中
-        const filterSelect = document.getElementById('book-filter');
-        if (filterSelect) {
-            filterSelect.innerHTML = '<option value="all">🔍 所有書卷（全部）</option>';
-            filterSelect.innerHTML += '<option value="ot_all">✨ 舊約全部 (創世記 - 瑪拉基書)</option>';
-            filterSelect.innerHTML += '<option value="nt_all">✨ 新約全部 (馬太福音 - 啟示錄)</option>';
-            filterSelect.innerHTML += '<option value="disabled" disabled>----------------------------------</option>';
-
-            Object.keys(BOOK_MAP).forEach(id => {
-                const option = document.createElement('option');
-                option.value = id;
-                option.textContent = BOOK_MAP[id];
-                filterSelect.appendChild(option);
-            });
+        populateBookFilter();
+        
+        if (statusElement) {
+            statusElement.innerText = "所有資料庫載入完成，可以開始搜尋！";
+            statusElement.style.color = '#2ecc71';
         }
-
-        document.getElementById('status').innerText = "所有資料庫載入完成，可以開始搜尋！"; 
     }) 
     .catch(err => { 
-        document.getElementById('status').innerText = "錯誤: 載入 JSON 失敗，請確認檔案路徑是否正確。"; 
-        console.error(err); 
+        console.error('❌ 載入失敗:', err);
+        const statusElement = document.getElementById('status');
+        if (statusElement) {
+            statusElement.innerText = `錯誤: 載入 JSON 失敗 (${err.message})，請確認檔案路徑是否正確。`;
+            statusElement.style.color = '#e74c3c';
+        }
     }); 
-};
+});
+
+/**
+ * 填充書卷過濾選單
+ */
+function populateBookFilter() {
+    const filterSelect = document.getElementById('book-filter');
+    if (!filterSelect) return;
+    
+    filterSelect.innerHTML = '<option value="all">🔍 所有書卷（全部）</option>';
+    filterSelect.innerHTML += '<option value="ot_all">✨ 舊約全部 (創世記 - 瑪拉基書)</option>';
+    filterSelect.innerHTML += '<option value="nt_all">✨ 新約全部 (馬太福音 - 啟示錄)</option>';
+    filterSelect.innerHTML += '<option value="disabled" disabled>----------------------------------</option>';
+
+    Object.keys(BOOK_MAP).forEach(id => {
+        const option = document.createElement('option');
+        option.value = id;
+        option.textContent = BOOK_MAP[id];
+        filterSelect.appendChild(option);
+    });
+}
 
 // ==========================================
 // 2. 關鍵字搜尋核心業務邏輯
 // ==========================================
+
 function runSearch() {
-    let rawKeyword = document.getElementById('keyword').value.trim();
-    if (!rawKeyword) return;
-    if (bibleData.length === 0 || bibleSimpData.length === 0) {
-        alert("資料庫尚未加載完成。");
+    const keywordInput = document.getElementById('keyword');
+    if (!keywordInput) return;
+    
+    let rawKeyword = keywordInput.value.trim();
+    if (!rawKeyword) {
+        alert("請輸入要搜尋的關鍵字！");
         return;
     }
-    const selectedBookFilter = document.getElementById('book-filter') ? document.getElementById('book-filter').value : 'all';
+    
+    if (bibleData.length === 0 || bibleSimpData.length === 0) {
+        alert("資料庫尚未加載完成，請稍後再試。");
+        return;
+    }
+    
+    const selectedBookFilter = document.getElementById('book-filter') ? 
+        document.getElementById('book-filter').value : 'all';
+    
+    // 簡繁轉換
     let tradKeyword = rawKeyword;
     let simpKeyword = rawKeyword;
     if (typeof s2t_t2s === 'object') {
         if (typeof s2t_t2s.s2t === 'function') tradKeyword = s2t_t2s.s2t(rawKeyword);
         if (typeof s2t_t2s.t2s === 'function') simpKeyword = s2t_t2s.t2s(rawKeyword);
     }
+    
+    // 判斷是否為簡體模式
     let isSimplified = false;
     if (/[爱创造圣经国门们时后会种样里个乐]/g.test(rawKeyword) || tradKeyword !== rawKeyword) {
         isSimplified = true;
     }
+    
     const currentBibleDatabase = isSimplified ? bibleSimpData : bibleData;
-    document.getElementById('status').innerText = "搜尋中...";
+    
+    const statusElement = document.getElementById('status');
+    if (statusElement) statusElement.innerText = "搜尋中...";
 
-    // 動態建立書名對照表，解決簡體模式下書名顯示繁體的 Bug
+    // 動態建立書名對照表
     const currentBookMap = {};
     for (const [id, tradName] of Object.entries(BOOK_MAP)) {
         if (isSimplified && typeof s2t_t2s === 'object' && typeof s2t_t2s.t2s === 'function') {
@@ -72,6 +123,7 @@ function runSearch() {
         }
     }
 
+    // 搜尋邏輯
     let otGroups = {};
     let ntGroups = {};
     let otTotalVerses = 0;
@@ -79,13 +131,19 @@ function runSearch() {
 
     currentBibleDatabase.forEach(entry => {
         const bookId = parseInt(entry.book, 10);
+        
+        // 書卷過濾
         if (selectedBookFilter !== 'all') {
             if (selectedBookFilter === 'ot_all' && bookId > 39) return;
             if (selectedBookFilter === 'nt_all' && bookId <= 39) return;
-            if (selectedBookFilter !== 'ot_all' && selectedBookFilter !== 'nt_all' && bookId !== parseInt(selectedBookFilter, 10)) return;
+            if (selectedBookFilter !== 'ot_all' && selectedBookFilter !== 'nt_all' && 
+                bookId !== parseInt(selectedBookFilter, 10)) return;
         }
+        
         const rawText = entry.text || "";
         const cleanText = cleanStrongs(rawText);
+        
+        // 關鍵字匹配
         let matchedKeyword = "";
         if (cleanText.includes(simpKeyword)) {
             matchedKeyword = simpKeyword;
@@ -94,6 +152,8 @@ function runSearch() {
         } else {
             return;
         }
+        
+        // 提取 Strong 編號
         let strongIds = [];
         const fallbackPattern = /[GH]\d+[a-zA-Z]?/g;
         const allMatches = rawText.match(fallbackPattern);
@@ -123,48 +183,85 @@ function runSearch() {
         });
     });
 
-    document.getElementById('ot-count').innerText = `（找到 ${otTotalVerses} 筆）`;
-    document.getElementById('nt-count').innerText = `（找到 ${ntTotalVerses} 筆）`;
+    // 更新計數
+    const otCountElement = document.getElementById('ot-count');
+    const ntCountElement = document.getElementById('nt-count');
+    if (otCountElement) otCountElement.innerText = `（找到 ${otTotalVerses} 筆）`;
+    if (ntCountElement) ntCountElement.innerText = `（找到 ${ntTotalVerses} 筆）`;
 
     const renderKeyword = isSimplified ? simpKeyword : tradKeyword;
 
-    // 🎯 這裡把 isSimplified（是否為簡體）當作第三個參數直接傳給 web.js
-    const otHtml = Object.keys(otGroups).length ? buildSectionsHtml(otGroups, renderKeyword, isSimplified) : "<p class='no-result'>無結果</p>";
-    const ntHtml = Object.keys(ntGroups).length ? buildSectionsHtml(ntGroups, renderKeyword, isSimplified) : "<p class='no-result'>無結果</p>";
+    // 🔥 使用新的 buildSectionsHtml（已整合到 data.js）
+    const otHtml = Object.keys(otGroups).length ? 
+        buildSectionsHtml(otGroups, renderKeyword, isSimplified, { debugMode: false }) : 
+        "<p class='no-result'>無結果</p>";
+    const ntHtml = Object.keys(ntGroups).length ? 
+        buildSectionsHtml(ntGroups, renderKeyword, isSimplified, { debugMode: false }) : 
+        "<p class='no-result'>無結果</p>";
 
-    document.getElementById('ot-results').innerHTML = otHtml;
-    document.getElementById('nt-results').innerHTML = ntHtml;
-    document.getElementById('results-area').style.display = 'block';
-    document.getElementById('status').innerText = "搜尋完畢！";
+    const otResults = document.getElementById('ot-results');
+    const ntResults = document.getElementById('nt-results');
+    const resultsArea = document.getElementById('results-area');
+    
+    if (otResults) otResults.innerHTML = otHtml;
+    if (ntResults) ntResults.innerHTML = ntHtml;
+    if (resultsArea) resultsArea.style.display = 'block';
+    
+    if (statusElement) statusElement.innerText = "搜尋完畢！";
+    
+    // 📊 GA4 數據統計
+    if (typeof gtag === 'function') {
+        gtag('event', 'bible_keyword_search', {
+            'keyword': rawKeyword,
+            'is_simplified': isSimplified,
+            'book_filter': selectedBookFilter,
+            'ot_results': otTotalVerses,
+            'nt_results': ntTotalVerses
+        });
+    }
 }
-
 
 // ==========================================
 // 3. 頁籤切換功能
 // ==========================================
+
 function switchMode(mode) {
     document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
     document.querySelectorAll('.search-panel').forEach(p => p.classList.remove('active'));
     
     if (mode === 'keyword') {
-        document.querySelectorAll('.tab-btn')[0].classList.add('active');
-        document.getElementById('panel-keyword').classList.add('active');
+        const btns = document.querySelectorAll('.tab-btn');
+        if (btns[0]) btns[0].classList.add('active');
+        const panel = document.getElementById('panel-keyword');
+        if (panel) panel.classList.add('active');
     } else {
-        document.querySelectorAll('.tab-btn')[1].classList.add('active');
-        document.getElementById('panel-reverse').classList.add('active');
+        const btns = document.querySelectorAll('.tab-btn');
+        if (btns[1]) btns[1].classList.add('active');
+        const panel = document.getElementById('panel-reverse');
+        if (panel) panel.classList.add('active');
     }
 }
 
-// 原文反查留空，你可以直接把你原本的 runReverseSearch() 代碼貼在下方
+// ==========================================
+// 4. 原文反查功能
+// ==========================================
+
 function runReverseSearch() {
-    // 貼上你原本的反查程式碼...
-    const rawInputText = document.getElementById('reverse-text').value.trim();
-    const targetWord = document.getElementById('reverse-target').value.trim();
+    const rawInputText = document.getElementById('reverse-text')?.value?.trim() || '';
+    const targetWord = document.getElementById('reverse-target')?.value?.trim() || '';
 
     if (!rawInputText || !targetWord) {
         alert("請輸入參考經文與要反查的特定中文字！");
         return;
     }
+    
+    // 檢查數據是否已加載
+    if (bibleData.length === 0 || bibleSimpData.length === 0) {
+        alert("資料庫尚未加載完成，請稍後再試。");
+        return;
+    }
+    
+    // TODO: 實現真正的反查邏輯
     alert(`【功能開發中】\n你希望在輸入的內文中，找出「${targetWord}」對應的希臘文或希伯來文編號。`);
     
     // 📊 GA4 數據統計上報反查次數
@@ -174,3 +271,27 @@ function runReverseSearch() {
         });
     }
 }
+
+// ==========================================
+// 5. 鍵盤快捷鍵支持
+// ==========================================
+
+// 按 Enter 鍵觸發搜索
+document.addEventListener('DOMContentLoaded', function() {
+    const keywordInput = document.getElementById('keyword');
+    if (keywordInput) {
+        keywordInput.addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                runSearch();
+            }
+        });
+    }
+});
+
+// ==========================================
+// 6. 導出（如果使用模塊系統）
+// ==========================================
+
+// 如果使用 ES Modules
+// export { runSearch, switchMode, runReverseSearch };
