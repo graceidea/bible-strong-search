@@ -1,8 +1,7 @@
 // ==========================================
-// 1. 初始化與異步加載三大 JSON 資料庫
+// main.js - 使用StrongSearchBuilder的新策略
 // ==========================================
 
-// 使用 DOMContentLoaded 而不是 window.onload，更可靠
 document.addEventListener('DOMContentLoaded', function() { 
     const statusElement = document.getElementById('status');
     if (statusElement) {
@@ -11,34 +10,36 @@ document.addEventListener('DOMContentLoaded', function() {
     
     Promise.all([ 
         fetch('./chinesetrad.json').then(res => { 
-            if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`); 
+            if (!res.ok) throw new Error(`HTTP ${res.status}`); 
             return res.json(); 
         }), 
         fetch('./chinesesimp.json').then(res => { 
-            if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`); 
+            if (!res.ok) throw new Error(`HTTP ${res.status}`); 
             return res.json(); 
         }), 
         fetch('./strongs_dict.json').then(res => { 
-            if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`); 
+            if (!res.ok) throw new Error(`HTTP ${res.status}`); 
             return res.json(); 
         }) 
     ]) 
     .then(([bibleTrad, bibleSimp, dict]) => { 
-        // 赋值给全局变量
         bibleData = bibleTrad;      
         bibleSimpData = bibleSimp;  
         strongsDict = dict; 
         
-        console.log(`✅ 數據加載完成: 繁體 ${bibleData.length} 節, 簡體 ${bibleSimpData.length} 節, 字典 ${Object.keys(strongsDict).length} 個詞條`);
+        console.log(`✅ 數據加載完成`);
+        console.log(`📚 繁體: ${bibleData.length} 節`);
+        console.log(`📚 簡體: ${bibleSimpData.length} 節`);
+        console.log(`📖 字典: ${Object.keys(strongsDict).length} 個詞條`);
         
-        // 🔥 初始化搜索构建器（新增）
+        // 🔥 初始化搜索构建器
         initSearchBuilder();
         
-        // 動態填充 66 卷書與範圍選項到選單中
+        // 填充書卷過濾選單
         populateBookFilter();
         
         if (statusElement) {
-            statusElement.innerText = "所有資料庫載入完成，可以開始搜尋！";
+            statusElement.innerText = "✅ 所有資料庫載入完成，可以開始搜尋！";
             statusElement.style.color = '#2ecc71';
         }
     }) 
@@ -46,23 +47,20 @@ document.addEventListener('DOMContentLoaded', function() {
         console.error('❌ 載入失敗:', err);
         const statusElement = document.getElementById('status');
         if (statusElement) {
-            statusElement.innerText = `錯誤: 載入 JSON 失敗 (${err.message})，請確認檔案路徑是否正確。`;
+            statusElement.innerText = `❌ 錯誤: 載入 JSON 失敗 (${err.message})`;
             statusElement.style.color = '#e74c3c';
         }
     }); 
 });
 
-/**
- * 填充書卷過濾選單
- */
 function populateBookFilter() {
     const filterSelect = document.getElementById('book-filter');
     if (!filterSelect) return;
     
     filterSelect.innerHTML = '<option value="all">🔍 所有書卷（全部）</option>';
-    filterSelect.innerHTML += '<option value="ot_all">✨ 舊約全部 (創世記 - 瑪拉基書)</option>';
-    filterSelect.innerHTML += '<option value="nt_all">✨ 新約全部 (馬太福音 - 啟示錄)</option>';
-    filterSelect.innerHTML += '<option value="disabled" disabled>----------------------------------</option>';
+    filterSelect.innerHTML += '<option value="ot_all">✨ 舊約全部</option>';
+    filterSelect.innerHTML += '<option value="nt_all">✨ 新約全部</option>';
+    filterSelect.innerHTML += '<option value="disabled" disabled>─────────────────</option>';
 
     Object.keys(BOOK_MAP).forEach(id => {
         const option = document.createElement('option');
@@ -73,7 +71,7 @@ function populateBookFilter() {
 }
 
 // ==========================================
-// 2. 關鍵字搜尋核心業務邏輯
+// 🔥 核心搜索函数 - 使用新策略
 // ==========================================
 
 function runSearch() {
@@ -91,8 +89,7 @@ function runSearch() {
         return;
     }
     
-    const selectedBookFilter = document.getElementById('book-filter') ? 
-        document.getElementById('book-filter').value : 'all';
+    const selectedBookFilter = document.getElementById('book-filter')?.value || 'all';
     
     // 簡繁轉換
     let tradKeyword = rawKeyword;
@@ -111,7 +108,7 @@ function runSearch() {
     const currentBibleDatabase = isSimplified ? bibleSimpData : bibleData;
     
     const statusElement = document.getElementById('status');
-    if (statusElement) statusElement.innerText = "搜尋中...";
+    if (statusElement) statusElement.innerText = "🔍 搜尋中...";
 
     // 動態建立書名對照表
     const currentBookMap = {};
@@ -123,7 +120,37 @@ function runSearch() {
         }
     }
 
-    // 搜尋邏輯
+    // ==========================================
+    // 🔥 第一步：建立Strong编号索引
+    // ==========================================
+    const builder = getSearchBuilder();
+    if (!builder) {
+        alert("搜索引擎未初始化，請刷新頁面重試。");
+        return;
+    }
+    
+    // 获取"关键词"的Strong编号索引
+    const strongIndex = builder.getStrongIndex(rawKeyword);
+    
+    console.log(`📊 關鍵字"${rawKeyword}"的Strong索引:`, Array.from(strongIndex));
+    console.log(`📊 索引大小: ${strongIndex.size} 個編號`);
+    
+    if (strongIndex.size === 0) {
+        document.getElementById('ot-results').innerHTML = 
+            `<div class='no-result' style='padding: 30px; text-align: center;'>
+                <div style='font-size: 20px;'>🔍</div>
+                <div>未找到包含「${rawKeyword}」的原文編號</div>
+            </div>`;
+        document.getElementById('nt-results').innerHTML = '';
+        document.getElementById('results-area').style.display = 'block';
+        if (statusElement) statusElement.innerText = "✅ 搜尋完成（無結果）";
+        return;
+    }
+
+    // ==========================================
+    // 🔥 第二步：用索引检索经文
+    // ==========================================
+    
     let otGroups = {};
     let ntGroups = {};
     let otTotalVerses = 0;
@@ -143,24 +170,27 @@ function runSearch() {
         const rawText = entry.text || "";
         const cleanText = cleanStrongs(rawText);
         
-        // 關鍵字匹配
-        let matchedKeyword = "";
-        if (cleanText.includes(simpKeyword)) {
-            matchedKeyword = simpKeyword;
-        } else if (cleanText.includes(tradKeyword)) {
-            matchedKeyword = tradKeyword;
-        } else {
-            return;
-        }
+        // 🔥 检查经文是否包含关键词
+        const containsKeyword = cleanText.includes(simpKeyword) || cleanText.includes(tradKeyword);
+        if (!containsKeyword) return;
         
-        // 提取 Strong 編號
-        let strongIds = [];
+        // 🔥 提取经文中的所有Strong编号
+        let allStrongIds = [];
         const fallbackPattern = /[GH]\d+[a-zA-Z]?/g;
-        const allMatches = rawText.match(fallbackPattern);
-        if (allMatches) {
-            strongIds = [...new Set(allMatches)];
+        const matches = rawText.match(fallbackPattern);
+        if (matches) {
+            allStrongIds = [...new Set(matches)];
         }
-        if (strongIds.length === 0) return;
+        if (allStrongIds.length === 0) return;
+        
+        // 🔥 关键：只保留在索引中的Strong编号
+        const relevantStrongIds = allStrongIds.filter(id => {
+            const cleanId = id.trim().toUpperCase();
+            return strongIndex.has(cleanId);
+        });
+        
+        // 如果没有相关的Strong编号，跳过
+        if (relevantStrongIds.length === 0) return;
 
         const verseData = {
             book_id: bookId,
@@ -170,14 +200,16 @@ function runSearch() {
             text: cleanText
         };
 
-        strongIds.forEach(strongId => {
+        // 只关联相关的Strong编号
+        relevantStrongIds.forEach(strongId => {
+            const cleanId = strongId.trim().toUpperCase();
             if (bookId <= 39) {
-                if (!otGroups[strongId]) otGroups[strongId] = [];
-                otGroups[strongId].push({...verseData});
+                if (!otGroups[cleanId]) otGroups[cleanId] = [];
+                otGroups[cleanId].push({...verseData});
                 otTotalVerses++;
             } else {
-                if (!ntGroups[strongId]) ntGroups[strongId] = [];
-                ntGroups[strongId].push({...verseData});
+                if (!ntGroups[cleanId]) ntGroups[cleanId] = [];
+                ntGroups[cleanId].push({...verseData});
                 ntTotalVerses++;
             }
         });
@@ -191,13 +223,20 @@ function runSearch() {
 
     const renderKeyword = isSimplified ? simpKeyword : tradKeyword;
 
-    // 🔥 使用新的 buildSectionsHtml（已整合到 data.js）
+    // 使用buildSectionsHtml显示结果（传入索引信息）
     const otHtml = Object.keys(otGroups).length ? 
-        buildSectionsHtml(otGroups, renderKeyword, isSimplified, { debugMode: false }) : 
-        "<p class='no-result'>無結果</p>";
+        buildSectionsHtml(otGroups, renderKeyword, isSimplified, { 
+            debugMode: false,
+            strongIndex: strongIndex  // 传递索引用于显示
+        }) : 
+        "<p class='no-result' style='padding: 20px; text-align: center; color: #999;'>📭 舊約中無結果</p>";
+    
     const ntHtml = Object.keys(ntGroups).length ? 
-        buildSectionsHtml(ntGroups, renderKeyword, isSimplified, { debugMode: false }) : 
-        "<p class='no-result'>無結果</p>";
+        buildSectionsHtml(ntGroups, renderKeyword, isSimplified, { 
+            debugMode: false,
+            strongIndex: strongIndex
+        }) : 
+        "<p class='no-result' style='padding: 20px; text-align: center; color: #999;'>📭 新約中無結果</p>";
 
     const otResults = document.getElementById('ot-results');
     const ntResults = document.getElementById('nt-results');
@@ -207,7 +246,9 @@ function runSearch() {
     if (ntResults) ntResults.innerHTML = ntHtml;
     if (resultsArea) resultsArea.style.display = 'block';
     
-    if (statusElement) statusElement.innerText = "搜尋完畢！";
+    if (statusElement) {
+        statusElement.innerText = `✅ 搜尋完畢！找到 ${otTotalVerses + ntTotalVerses} 節經文，關聯 ${strongIndex.size} 個原文編號`;
+    }
     
     // 📊 GA4 數據統計
     if (typeof gtag === 'function') {
@@ -215,6 +256,7 @@ function runSearch() {
             'keyword': rawKeyword,
             'is_simplified': isSimplified,
             'book_filter': selectedBookFilter,
+            'strong_matches': strongIndex.size,
             'ot_results': otTotalVerses,
             'nt_results': ntTotalVerses
         });
@@ -222,7 +264,7 @@ function runSearch() {
 }
 
 // ==========================================
-// 3. 頁籤切換功能
+// 頁籤切換功能
 // ==========================================
 
 function switchMode(mode) {
@@ -242,10 +284,6 @@ function switchMode(mode) {
     }
 }
 
-// ==========================================
-// 4. 原文反查功能
-// ==========================================
-
 function runReverseSearch() {
     const rawInputText = document.getElementById('reverse-text')?.value?.trim() || '';
     const targetWord = document.getElementById('reverse-target')?.value?.trim() || '';
@@ -255,16 +293,13 @@ function runReverseSearch() {
         return;
     }
     
-    // 檢查數據是否已加載
     if (bibleData.length === 0 || bibleSimpData.length === 0) {
         alert("資料庫尚未加載完成，請稍後再試。");
         return;
     }
     
-    // TODO: 實現真正的反查邏輯
     alert(`【功能開發中】\n你希望在輸入的內文中，找出「${targetWord}」對應的希臘文或希伯來文編號。`);
     
-    // 📊 GA4 數據統計上報反查次數
     if (typeof gtag === 'function') {
         gtag('event', 'bible_reverse_search_click', {
             'target_word': targetWord
@@ -273,10 +308,9 @@ function runReverseSearch() {
 }
 
 // ==========================================
-// 5. 鍵盤快捷鍵支持
+// 鍵盤快捷鍵
 // ==========================================
 
-// 按 Enter 鍵觸發搜索
 document.addEventListener('DOMContentLoaded', function() {
     const keywordInput = document.getElementById('keyword');
     if (keywordInput) {
@@ -288,10 +322,3 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 });
-
-// ==========================================
-// 6. 導出（如果使用模塊系統）
-// ==========================================
-
-// 如果使用 ES Modules
-// export { runSearch, switchMode, runReverseSearch };
