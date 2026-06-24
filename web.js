@@ -1,21 +1,16 @@
 // ==========================================
-// 1. 生成表格 HTML 與精準編號染色邏輯（100% 安全、剔除無關編號、絕不死循環版）
+// 1. 生成表格 HTML 與精準編號染色邏輯（零正則、防回溯、100%絕不死循環純淨版）
 // ==========================================
 function buildSectionsHtml(groups, keyword, isSimplifiedMode) {
   let html = "";
   
-  // 🎯 1. 建立一個乾淨的儲存容器
+  // 🎯 1. 深度清洗與數據過濾：完全使用字串拆分，徹底杜絕正則死循環
   const cleanGroups = {};
   
-  // 遍歷所有原始強編號
   Object.keys(groups).forEach(strongId => {
     const verses = groups[strongId];
     const validVerses = [];
-    const escapedStrong = strongId.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
-    
-    // 構造一個局部無死循環的安全正則：只負責提取該 strongId 左邊的中文詞組
-    // 去掉了全球匹配修飾符 'g'，杜絕 lastIndex 導致的死循環
-    const matchRegex = new RegExp(`([^\\x00-\\xff\\s<{|\\[]*)(?=[\\s<{|\\[]*${escapedStrong}\\b)`, "i");
+    const targetStrong = strongId.trim().toUpperCase();
 
     verses.forEach(v => {
       const currentDb = isSimplifiedMode ? bibleSimpData : bibleData;
@@ -27,27 +22,40 @@ function buildSectionsHtml(groups, keyword, isSimplifiedMode) {
 
       if (originalEntry && originalEntry.text) {
         const rawText = originalEntry.text;
-        const matchResult = rawText.match(matchRegex);
         
-        // 只要當前強編號左側緊鄰的中文詞組（例如 [0] 是 "你所愛的人"、"愛心" 等）確實包含關鍵字
-        if (matchResult && matchResult[0] && matchResult[0].includes(keyword)) {
-          validVerses.push(v);
+        // 將文本統一轉為大寫，方便精準切分編號
+        const upperText = rawText.toUpperCase();
+        
+        // 如果文本裡確實包含這個強編號，用它作為刀刃把經文切成兩半
+        if (upperText.includes(targetStrong)) {
+          const parts = upperText.split(targetStrong);
+          
+          // parts[0] 就是這個強編號左邊的所有文字
+          // 我們只需要檢查緊鄰著編號左側的中文段落裡，有沒有包含你的關鍵字 "愛"
+          const leftSegment = parts[0];
+          
+          // 提取左側片段最後5個字元（因為 "你所愛的"、"愛心" 長度都不會超過5個字）
+          const tailText = leftSegment.substring(Math.max(0, leftSegment.length - 8));
+          
+          if (tailText.includes(keyword)) {
+            validVerses.push(v); // 只有真正和「愛」綁定的經文才保留
+          }
         }
       } else {
-        // Fallback 安全回退：若無編號數據庫，只要純文字包含關鍵字就保留
+        // Fallback 安全回退
         if (v.text && v.text.includes(keyword)) {
           validVerses.push(v);
         }
       }
     });
 
-    // 🎯 只有當這個原文編號下，存在真正與關鍵字綁定的經文時，才保留這個 StrongId 表格
+    // 🎯 只有當這個原文編號下，存在真正與“愛”字詞組綁定的經文時，才保留這個 StrongId 表格
     if (validVerses.length > 0) {
       cleanGroups[strongId] = validVerses;
     }
   });
 
-  // 🎯 2. 使用安全清洗後的數據進行排序與渲染
+  // 🎯 2. 使用安全清洗後的純淨數據進行排序與網頁渲染
   const sortedKeys = Object.keys(cleanGroups).sort(sortStrongIds);
 
   if (sortedKeys.length === 0) {
@@ -56,6 +64,7 @@ function buildSectionsHtml(groups, keyword, isSimplifiedMode) {
 
   sortedKeys.forEach(strongId => {
     let verses = cleanGroups[strongId];
+    const targetStrong = strongId.trim().toUpperCase();
     
     // 按卷、章、節排序
     verses.sort((a, b) => {
@@ -92,17 +101,33 @@ function buildSectionsHtml(groups, keyword, isSimplifiedMode) {
       
       if (originalEntry && originalEntry.text) {
         let rawText = originalEntry.text;
-        const escapedStrong = strongId.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
         
-        // 渲染時使用非全局的精準匹配替換，配合循環確保安全
-        const renderRegex = new RegExp(`([^\\x00-\\xff\\s<{|\\[]*${keyword}[^\\x00-\\xff\\s<{|\\[]*)(?=[\\s<{|\\[]*${escapedStrong}\\b)`, "i");
-        
-        // 使用 while 替換，安全無感，絕不卡死
-        let match;
-        while ((match = rawText.match(renderRegex)) !== null) {
-          const matchedText = match[1];
-          // 臨時標記防二次重複匹配
-          rawText = rawText.replace(renderRegex, `__RED_START__${matchedText}__RED_END__`);
+        // 🎯 核心染色演算法：利用強編號進行精準「切片還原」
+        const upperText = rawText.toUpperCase();
+        if (upperText.includes(targetStrong)) {
+          // 找到強編號在經文中的確切起止位置
+          const startIndex = upperText.indexOf(targetStrong);
+          
+          // 提取編號左邊的全部文本
+          const leftText = rawText.substring(0, startIndex);
+          // 提取編號及其右邊的全部文本
+          const rightText = rawText.substring(startIndex);
+          
+          // 找出左邊文本最後一個非中文字元（如 <, {, 空格）的位置，從而孤立出與該編號緊鄰的中文詞組
+          let wordStart = leftText.length - 1;
+          while (wordStart >= 0 && /[^\x00-\xff]/.test(leftText[wordStart])) {
+            wordStart--;
+          }
+          wordStart++; // 修正索引到漢字開始的地方
+          
+          // 提取出真正屬於當前編號的中文詞組（例如 "你所愛的人" 或 "愛心"）
+          const targetWord = leftText.substring(wordStart);
+          const remainLeft = leftText.substring(0, wordStart);
+          
+          // 如果這個詞組裡確實包含你要找的字，將其整體包裹紅色標籤
+          if (targetWord.includes(keyword)) {
+            rawText = remainLeft + `__RED_START__${targetWord}__RED_END__` + rightText;
+          }
         }
 
         // 大掃除：徹底蒸發經文裡的所有原文編號與殘留括號
@@ -151,7 +176,7 @@ function getLocalStrongsDefinitionHtml(strongId) {
 
   if (rawText.includes('|')) {
     const parts = rawText.split('|');
-    lemma = `<span class="dict-lemma" style="color: #4a90e2; font-weight: bold; margin-left: 5px;">${safeEscape(parts.trim())}</span>`;
+    lemma = `<span class="dict-lemma" style="color: #4a90e2; font-weight: bold; margin-left: 5px;">${safeEscape(parts[0].trim())}</span>`;
     content = parts.slice(1).join('|').trim();
   }
 
