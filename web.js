@@ -1,68 +1,57 @@
 // ==========================================
-// 1. 生成表格 HTML 與精準編號染色邏輯（柔和局部清洗、真愛回歸純淨版）
+// 1. 生成表格 HTML 與精準編號染色邏輯（動態關鍵字白名單控制、極致純淨通用版）
 // ==========================================
 function buildSectionsHtml(groups, keyword, isSimplifiedMode) {
   let html = "";
-  const cleanGroups = {};
   
-  // 🎯 1. 柔和清洗與數據過濾
-  Object.keys(groups).forEach(strongId => {
-    const verses = groups[strongId];
-    const validVerses = [];
-    const targetStrong = strongId.trim().toUpperCase();
-
-    verses.forEach(v => {
-      const currentDb = isSimplifiedMode ? bibleSimpData : bibleData;
-      const originalEntry = currentDb ? currentDb.find(s => 
-        parseInt(s.book, 10) === v.book_id && 
-        parseInt(s.chapter, 10) === parseInt(v.chapter, 10) && 
-        parseInt(s.verse, 10) === parseInt(v.verse, 10)
-      ) : null;
-
-      if (originalEntry && originalEntry.text) {
-        const rawText = originalEntry.text;
-        const upperText = rawText.toUpperCase();
-        
-        if (upperText.includes(targetStrong)) {
-          const idx = upperText.indexOf(targetStrong);
-          const leftPart = rawText.substring(0, idx);
-          
-          // 🛠️ 核心修正：捕獲緊鄰該編號左側的連續漢字詞組
-          const wordMatch = leftPart.match(/([^\x00-\xff]+)[<\s{\[]*$/);
-          
-          if (wordMatch) {
-            const exactBoundWord = wordMatch[1]; // 拿到緊挨著這個編號的中文詞（例如 "愛我"、"你所愛的人"）
-            
-            // 只要這個詞組裡確實包含關鍵字（如“愛”），這節經文就是有效的真愛！
-            if (exactBoundWord.includes(keyword)) {
-              validVerses.push(v);
-            }
-          }
-        }
-      } else {
-        if (v.text && v.text.includes(keyword)) {
-          validVerses.push(v);
-        }
+  // 取得全域的字典物件（兼容跨文件調用，若找不到則嘗試去 window 找）
+  const dict = typeof strongsDict !== 'undefined' ? strongsDict : window.strongsDict;
+  
+  // 🎯 【核心突破】根據輸入的關鍵字，動態建立專屬的原文編號白名單 (Dynamic StrongList)
+  const dynamicStrongList = new Set();
+  
+  if (dict && keyword) {
+    Object.keys(dict).forEach(strongId => {
+      const dictText = dict[strongId];
+      // 只要這個編號在原文字典裡的定義包含了使用者搜尋的關鍵字（如「愛」或「信」等），就加入白名單
+      if (typeof dictText === 'string' && dictText.includes(keyword)) {
+        dynamicStrongList.add(strongId.trim().toUpperCase());
       }
     });
+  }
 
-    // 只有當這個原文編號下存在真正跟“愛”字有關的經文時，才保留這個 StrongId 表格
-    if (validVerses.length > 0) {
-      cleanGroups[strongId] = validVerses;
+  const cleanGroups = {};
+  
+  // 🎯 動態白名單大清洗：只要不在動態白名單內的編號（如鄰近詞 G444, G846 等）直接整塊驅逐，不生成表格
+  Object.keys(groups).forEach(strongId => {
+    const cleanId = strongId.trim().toUpperCase();
+    
+    // 檢查目前強編號是否在動態生成的白名單中（相容帶有字母尾碼如 G25a 的情況）
+    let isValidCode = dynamicStrongList.has(cleanId);
+    
+    if (!isValidCode) {
+      // 進行模糊前綴匹配（防禦 G25a 這種尾碼）
+      isValidCode = Array.from(dynamicStrongList).some(validId => cleanId.startsWith(validId));
+    }
+    
+    if (isValidCode) {
+      cleanGroups[strongId] = groups[strongId]; // 只有真正定義相關的原文編號會被保留
     }
   });
 
-  // 🎯 2. 使用清洗後的純淨數據進行網頁渲染
+  // 🎯 使用清洗後的純淨真愛數據進行排序與網頁渲染
   const sortedKeys = Object.keys(cleanGroups).sort(sortStrongIds);
 
   if (sortedKeys.length === 0) {
-    return "<div class='no-result' style='padding: 20px; text-align: center; color: #999;'>未找到符合原文綁定條件的經文。</div>";
+    return `<div class='no-result' style='padding: 20px; text-align: center; color: #999;'>
+              未找到字典釋義包含「${keyword}」的原文編號經文。
+            </div>`;
   }
 
   sortedKeys.forEach(strongId => {
     let verses = cleanGroups[strongId];
-    const targetStrong = strongId.trim().toUpperCase();
     
+    // 按卷、章、節排序
     verses.sort((a, b) => {
       if (a.book_id !== b.book_id) return a.book_id - b.book_id;
       if (parseInt(a.chapter, 10) !== parseInt(b.chapter, 10)) return parseInt(a.chapter, 10) - parseInt(b.chapter, 10);
@@ -97,37 +86,17 @@ function buildSectionsHtml(groups, keyword, isSimplifiedMode) {
       
       if (originalEntry && originalEntry.text) {
         let rawText = originalEntry.text;
-        const upperText = rawText.toUpperCase();
-        
-        if (upperText.includes(targetStrong)) {
-          const startIndex = upperText.indexOf(targetStrong);
-          const leftText = rawText.substring(0, startIndex);
-          const rightText = rawText.substring(startIndex);
-          
-          const wordMatch = leftText.match(/([^\x00-\xff]+)([<\s{\[]*)$/);
-          if (wordMatch) {
-            const targetWord = wordMatch[1]; // 拿到例如 "愛心"、"愛我"、"你所愛的人"
-            const symbols = wordMatch[2];    
-            const remainLeft = leftText.substring(0, leftText.length - wordMatch[0].length);
-            
-            if (targetWord.includes(keyword)) {
-              // 🎯 【高亮微調】：只在詞組內的“愛”字兩邊包上紅色標籤，其餘字（如 “我”）維持正常黑色
-              const redPart = targetWord.split(keyword).join(`__RED_START__${keyword}__RED_END__`);
-              rawText = remainLeft + redPart + symbols + rightText;
-            }
-          }
-        }
 
-        // 大掃除
+        // 大掃除：徹底蒸發經文裡的所有原文編號與殘留括號
         rawText = rawText.replace(/[<{ ]*[GH]\d+[a-zA-Z]?[>} ]*/gi, '');
         rawText = rawText.replace(/[<>{}[\]]/g, '');
 
-        // 還原紅色標籤
-        rawText = rawText.split("__RED_START__").join(`<span style="color: red; font-weight: bold;">`);
-        rawText = rawText.split("__RED_END__").join(`</span>`);
-        highlightedText = rawText;
+        // 🎯 極致純淨染色：只將搜尋的關鍵字（如「愛」）染成紅色，別的任何字（包括“心”、“我”等鄰近漢字）都不要變
+        // 使用 split 和 join 是 JavaScript 中最穩固、絕無任何正則回溯死循環風險的染色法
+        highlightedText = rawText.split(keyword).join(`<span style="color: red; font-weight: bold;">${keyword}</span>`);
         
       } else {
+        // Fallback 安全回退機制
         const safeText = typeof escapeHtml === 'function' ? escapeHtml(v.text) : v.text;
         highlightedText = safeText.split(keyword).join(`<span style="color: red; font-weight: bold;">${keyword}</span>`);
       }
@@ -148,7 +117,7 @@ function buildSectionsHtml(groups, keyword, isSimplifiedMode) {
 }
 
 // ==========================================
-// 2. 獲取本地辭典定義 HTML
+// 2. 獲取本地辭典定義 HTML（徹底移除陣列操作，100% 避坑防崩潰版）
 // ==========================================
 function getLocalStrongsDefinitionHtml(strongId) {
   const dict = typeof strongsDict !== 'undefined' ? strongsDict : window.strongsDict;
@@ -162,6 +131,7 @@ function getLocalStrongsDefinitionHtml(strongId) {
     return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
   };
 
+  // 🎯 採用更安全的字串原生截取，不使用 split 陣列，完美防禦任何未知資料格式，徹底解決 TypeError
   if (typeof rawText === 'string' && rawText.includes('|')) {
     const pipeIndex = rawText.indexOf('|');
     const firstPart = rawText.substring(0, pipeIndex).trim();
