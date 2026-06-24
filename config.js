@@ -124,3 +124,26 @@ function buildSectionsHtmlLegacy(groups, keyword, isSimplifiedMode, options = {}
     console.error('⚠️ 降级函数被调用，请确保 StrongSearchBuilder 已正确加载');
     return `<div class='error-message'>搜索功能不可用，请刷新页面重试</div>`;
 }
+/**
+ * 获取关键词的Strong编号索引
+ * 这是一个便捷函数，直接暴露Class的功能
+ */
+function getStrongIndex(keyword) {
+    const builder = getSearchBuilder();
+    if (!builder) {
+        console.warn('⚠️ 搜索构建器未初始化');
+        return new Set();
+    }
+    return builder.getStrongIndex(keyword);
+}
+
+/**
+ * 获取搜索统计（包含索引信息）
+ */
+function getSearchStats(groups, keyword) {
+    const builder = getSearchBuilder();
+    if (!builder) {
+        return null;
+    }
+    return builder.getSearchStats(groups, keyword);
+}
