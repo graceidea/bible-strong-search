@@ -1,5 +1,5 @@
 // ==========================================
-// 1. 生成表格 HTML 與精準編號染色邏輯（精準純淨版：支援愛心/愛自動識別）
+// 1. 生成表格 HTML 與精準編號染色邏輯（帶有偵錯輸出 Log 版）
 // ==========================================
 function buildSectionsHtml(groups, keyword, isSimplifiedMode) {
   let html = "";
@@ -31,7 +31,6 @@ function buildSectionsHtml(groups, keyword, isSimplifiedMode) {
         <tbody>
     `;
 
-    // 🎯 核心遍歷：渲染每一行經文
     verses.forEach(v => {
       const currentDb = isSimplifiedMode ? bibleSimpData : bibleData;
       const originalEntry = currentDb ? currentDb.find(s => 
@@ -42,35 +41,49 @@ function buildSectionsHtml(groups, keyword, isSimplifiedMode) {
 
       let highlightedText = "";
       
+      // 🎯 [偵錯日誌] 輸出目前檢查的經文節數
+      console.log(`%c【正在調試】${v.book_name} ${v.chapter}:${v.verse} | 當前區塊原文編號: ${strongId}`, "color: #4a90e2; font-weight: bold;");
+
       if (originalEntry && originalEntry.text) {
         let rawText = originalEntry.text;
         const escapedStrong = strongId.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
 
-        // 🎯 1. 升級版超精準攔截：
-        // (?:${keyword}心|${keyword}) 優先嘗試匹配「愛心」，匹配不到再匹配單個「愛」字
-        // 後方用正向肯定預查 (?=...) 緊緊鎖死當前表格的 strongId
+        // 🎯 [偵錯日誌] 輸出資料庫裡未清洗前的原始文字（帶有強編號的模樣）
+        console.log("-> 數據庫原始文本(帶編號):", rawText);
+
+        // 升級版超精準攔截正則
         const redRegex = new RegExp(`((?:${keyword}心|${keyword}))(?=[\\s<{|\\[]*${escapedStrong}\\b)`, "gi");
         
-        // 透過回呼函數動態獲取實際匹配到的字串（可能是“愛”或“愛心”），並加上臨時自訂標籤
+        // 🎯 [偵錯日誌] 看看正則表達式到底有沒有成功撈到東西
+        const matches = rawText.match(redRegex);
+        console.log("-> 正則表達式匹配到的文字結果:", matches);
+
         rawText = rawText.replace(redRegex, function(match) {
+          console.log("-> [成功攔截] 進入替換回呼函數，匹配到的目標是:", match);
           return `__RED_START__${match}__RED_END__`;
         });
 
-        // 🎯 2. 大大掃除：徹底蒸發經文裡的所有原文編號與殘留括號
-        // （此處沒有常規黃色高亮，其他不屬於當前編號的文字會安全地保持黑色原樣）
+        // 大掃除
         rawText = rawText.replace(/[<{ ]*[GH]\d+[a-zA-Z]?[>} ]*/gi, '');
         rawText = rawText.replace(/[<>{}[\]]/g, '');
 
-        // 🎯 3. 還原標籤：將臨時自訂標籤替換成真正的紅色加粗網頁樣式
+        // 還原標籤
         rawText = rawText.split("__RED_START__").join(`<span style="color: red; font-weight: bold;">`);
         rawText = rawText.split("__RED_END__").join(`</span>`);
         highlightedText = rawText;
         
+        console.log("-> 最終生成的 HTML 經文內容:", highlightedText);
+        
       } else {
-        // Fallback 安全回退機制：如果找不到帶編號的原始資料庫，僅作單純的關鍵字染紅
+        // 🎯 [偵錯日誌] 如果進入了這裏，代表在帶編號數據庫(bibleData)中根本找不到這一節！
+        console.warn(`-> [警告] 無法在帶編號數據庫中找到該節，觸發了 Fallback 安全回退機制。`);
+        
         const safeText = typeof escapeHtml === 'function' ? escapeHtml(v.text) : v.text;
+        console.log("-> 回退機制的輸入純文字:", safeText);
+
         if (safeText.includes(`${keyword}心`)) {
-          highlightedText = safeText.split(`${keyword}心`).join(`<span style="color: red; font-weight: bold;">${keyword}心</span>`);
+          console.log(`-> [回退成功] 純文字中包含「${keyword}心」，執行整體切換`);
+          highlightedText = safeText.split(`${keyword}心`).join(`<span style="color: red; font-weight: bold;">${keyword}</span>`);
         } else {
           highlightedText = safeText.split(keyword).join(`<span style="color: red; font-weight: bold;">${keyword}</span>`);
         }
@@ -90,6 +103,49 @@ function buildSectionsHtml(groups, keyword, isSimplifiedMode) {
 
   return html;
 }
+
+// ==========================================
+// 2. 獲取本地辭典定義 HTML
+// ==========================================
+function getLocalStrongsDefinitionHtml(strongId) {
+  const dict = typeof strongsDict !== 'undefined' ? strongsDict : window.strongsDict;
+  if (!dict || !dict[strongId]) return "";
+
+  const rawText = dict[strongId];
+  let lemma = "";
+  let content = rawText;
+
+  const safeEscape = typeof escapeHtml === 'function' ? escapeHtml : function(str) {
+    return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  };
+
+  if (rawText.includes('|')) {
+    const parts = rawText.split('|');
+    lemma = `<span class="dict-lemma" style="color: #4a90e2; font-weight: bold; margin-left: 5px;">${safeEscape(parts[0].trim())}</span>`;
+    content = parts.slice(1).join('|').trim();
+  }
+
+  let formattedContent = safeEscape(content).replace(/\n/g, '<br>');
+
+  if (formattedContent.length > 150) {
+    formattedContent = formattedContent.substring(0, 150) + "...";
+  }
+
+  return `
+    <div class="strongs-tooltip" style="display: inline-block; margin-left: 10px; position: relative; font-size: 14px;">
+      <span class="tooltip-trigger" style="cursor: pointer; background: #eef2f7; padding: 2px 6px; border-radius: 4px; color: #555; border: 1px solid #ddd;">ℹ️ 字典定義</span>
+      <div class="tooltip-content" style="display: none; position: absolute; left: 0; top: 25px; background: white; border: 1px solid #ccc; padding: 10px; width: 320px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); z-index: 999; border-radius: 6px; font-weight: normal; color: #333; text-align: left; line-height: 1.4;">
+        <div class="dict-header" style="border-bottom: 1px solid #eee; padding-bottom: 5px; margin-bottom: 5px; font-weight: bold; color: #000;">
+          ${safeEscape(strongId)} ${lemma}
+        </div>
+        <div class="dict-body" style="max-height: 200px; overflow-y: auto; font-size: 13px;">
+          ${formattedContent}
+        </div>
+      </div>
+    </div>
+  `;
+}
+
 
 // ==========================================
 // 2. 獲取本地辭典定義 HTML（與純文字結構相容）
