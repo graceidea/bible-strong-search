@@ -84,6 +84,45 @@ function runSearch() {
         return;
     }
     
+    // ==========================================
+    // 🔥 调试代码 - 检查数据
+    // ==========================================
+    console.log('=== 调试信息 ===');
+    console.log('1. 关键词:', rawKeyword);
+    console.log('2. bibleData 长度:', bibleData?.length || 0);
+    console.log('3. bibleSimpData 长度:', bibleSimpData?.length || 0);
+    console.log('4. strongsDict 键数量:', Object.keys(strongsDict || {}).length);
+    
+    // 检查字典中是否有包含"爱"的条目
+    let foundInDict = 0;
+    const sampleMatches = [];
+    for (const [key, value] of Object.entries(strongsDict || {})) {
+        if (value && value.includes('爱')) {
+            foundInDict++;
+            if (sampleMatches.length < 5) {
+                sampleMatches.push({ key, value: value.substring(0, 50) });
+            }
+        }
+    }
+    console.log('5. 字典中包含"爱"的条目数:', foundInDict);
+    console.log('6. 示例匹配:', sampleMatches);
+    
+    if (foundInDict === 0) {
+        // 检查字典前几个条目
+        const sample = Object.entries(strongsDict || {}).slice(0, 3);
+        console.log('7. 字典样例:', sample);
+        alert(`❌ 字典中未找到包含"爱"的条目！\n字典共有 ${Object.keys(strongsDict || {}).length} 个条目。\n请检查 strongs_dict.json 是否正确加载。`);
+        return;
+    }    
+    const keywordInput = document.getElementById('keyword');
+    if (!keywordInput) return;
+    
+    let rawKeyword = keywordInput.value.trim();
+    if (!rawKeyword) {
+        alert("請輸入要搜尋的關鍵字！");
+        return;
+    }
+    
     if (bibleData.length === 0 || bibleSimpData.length === 0) {
         alert("資料庫尚未加載完成，請稍後再試。");
         return;
