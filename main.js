@@ -139,8 +139,6 @@ function runSearch() {
     return; 
   } 
 
-  // ✂️ 【此处删除了重复声明的 keywordInput 及其后续几行代码】
-
   if (bibleData.length === 0 || bibleSimpData.length === 0) { 
     alert("資料庫尚未加載完成，請稍後再試。"); 
     return; 
@@ -176,8 +174,9 @@ function runSearch() {
     } 
   }
 
-  // 注意：原代码此处未闭合，如果是函数的末尾，请确保有花括号闭合。
+  // 提示：你贴出来的原始代码到这里就结束了，我已经帮你用花括号闭合了这个函数。
 }
+
 
 
 // ==========================================
