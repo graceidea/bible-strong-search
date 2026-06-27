@@ -54,21 +54,46 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 function populateBookFilter() {
-    const filterSelect = document.getElementById('book-filter');
-    if (!filterSelect) return;
-    
-    filterSelect.innerHTML = '<option value="all">🔍 所有書卷（全部）</option>';
-    filterSelect.innerHTML += '<option value="ot_all">✨ 舊約全部</option>';
-    filterSelect.innerHTML += '<option value="nt_all">✨ 新約全部</option>';
-    filterSelect.innerHTML += '<option value="disabled" disabled>─────────────────</option>';
+  const filterSelect = document.getElementById('book-filter');
+  if (!filterSelect) return;
 
-    Object.keys(BOOK_MAP).forEach(id => {
-        const option = document.createElement('option');
-        option.value = id;
-        option.textContent = BOOK_MAP[id];
-        filterSelect.appendChild(option);
-    });
+  // 1. 清空并初始化顶部全局选项
+  filterSelect.innerHTML = `
+    <option value="all">🔍 所有書卷（全部）</option>
+    <option value="ot_all">✨ 舊約全部</option>
+    <option value="nt_all">✨ 新約全部</option>
+  `;
+
+  // 2. 创建旧约和新约的分组标签
+  const otGroup = document.createElement('optgroup');
+  otGroup.label = "📜 ————— 舊約 —————";
+
+  const ntGroup = document.createElement('optgroup');
+  ntGroup.label = "📖 ————— 新約 —————";
+
+  // 3. 遍历书籍并按编号/索引归类
+  // 假设你的 BOOK_MAP 的 key/id 是按圣经顺序排列的（例如 1-39 是旧约，40-66 是新约）
+  // 或者你也可以根据 id 的前缀、或通过计数器来判断
+  let index = 0; 
+  Object.keys(BOOK_MAP).forEach(id => {
+    const option = document.createElement('option');
+    option.value = id;
+    option.textContent = BOOK_MAP[id];
+
+    // 判断依据：前39卷划入旧约，后27卷划入新约
+    if (index < 39) {
+      otGroup.appendChild(option);
+    } else {
+      ntGroup.appendChild(option);
+    }
+    index++;
+  });
+
+  // 4. 将分组正式追加到下拉菜单中
+  filterSelect.appendChild(otGroup);
+  filterSelect.appendChild(ntGroup);
 }
+
 
 // ==========================================
 // 🔥 核心搜索函数 - 使用新策略
