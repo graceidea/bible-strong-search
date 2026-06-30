@@ -214,27 +214,37 @@ function runReverseSearch() {
         return;
     }
 
-    // Google Analytics 埋點
     if (typeof gtag === 'function') {
         gtag('event', 'bible_reverse_search_click', { 'target_word': targetWord });
     }
 
     // ========================================================
-    // 🔥 基于你的数据结构：使用正则表达式精准解析 字{编号}
+    // 🔥 超強容錯機制：只提取純中文字符進行比對
     // ========================================================
     
-    // 1. 将用户输入的参考经文去除所有编号（比如用户可能从别处复制带编号的，也可能不带）
-    // 确保我们只拿纯汉字去数据库里做全局比对
-    const cleanInputText = rawInputText.replace(/\{[HG]\d+\}/g, '');
+    // 1. 定義一個清洗函數：移除所有括號、英文、數字、空格、標點符號以及特殊符號（如 ¶）
+    // 只保留中文字符：[\u4e00-\u9fa5]
+    const cleanToPureChinese = (str) => {
+        if (!str) return '';
+        const matches = str.match(/[\u4e00-\u9fa5]/g);
+        return matches ? matches.join('') : '';
+    };
 
-    // 2. 在繁体/简体数据库中匹配该段经文
+    // 清洗用戶輸入的經文
+    const cleanInputText = cleanToPureChinese(rawInputText);
+
+    if (!cleanInputText) {
+        alert("請在參考經文中包含至少一個中文字！");
+        return;
+    }
+
+    // 2. 在繁體/簡體數據庫中匹配經文（同樣用純中文字符比對）
     let matchedVerses = [];
     
-    // 匹配时，要把数据库里带 {H1234} 的文本先剔除掉编号，再比对纯文本是否包含用户输入的句子
     bibleData.forEach(verse => {
         if (verse.text) {
-            const cleanVerseText = verse.text.replace(/\{[HG]\d+\}/g, '');
-            if (cleanVerseText.includes(cleanInputText)) {
+            const pureVerseText = cleanToPureChinese(verse.text);
+            if (pureVerseText.includes(cleanInputText)) {
                 matchedVerses.push(verse);
             }
         }
@@ -243,38 +253,36 @@ function runReverseSearch() {
     if (matchedVerses.length === 0) {
         bibleSimpData.forEach(verse => {
             if (verse.text) {
-                const cleanVerseText = verse.text.replace(/\{[HG]\d+\}/g, '');
-                if (cleanVerseText.includes(cleanInputText)) {
+                const pureVerseText = cleanToPureChinese(verse.text);
+                if (pureVerseText.includes(cleanInputText)) {
                     matchedVerses.push(verse);
                 }
             }
         });
     }
 
-    // 3. 如果没找到这段经文，给出提示
+    // 3. 依舊找不到的提示
     if (matchedVerses.length === 0) {
-        alert(`❌ 在資料庫中找不到包含「${cleanInputText.substring(0, 10)}...」的經文。請確認字句是否正確。`);
+        alert(`❌ 在資料庫中找不到包含「${rawInputText.substring(0, 10)}...」的經文。\n(提示：請嘗試輸入更短的核心字句，例如「起初」或「創造天地」)`);
         return;
     }
 
-    // 4. 精准提取：在匹配到的经文原句中，找出带有目标字（如“神”或“创造”）的 {H/Gxxxx} 编号
+    // 4. 精準提取：在匹配到的經文原句中，找出帶有目標字（如「天」）的強氏編號
     const foundStrongsNumbers = new Set();
     
-    // 构建动态正则表达式。例如目标字是"神"，正则会匹配：神{H430} 或 包含"神"的词如 創造神{Hxxxx}
-    // 匹配规则：[^\{\}\s]* 允许目标字前后有其他汉字，紧跟着 {H1234} 或 {G1234}
+    // 改良的正則表達式：更安全地捕捉「中文字{編號}」
     const regex = new RegExp(`([^\\{\\}\\s]*${targetWord}[^\\{\\}\\s]*)\\{([HG]\\d+)\\}`, 'g');
 
     matchedVerses.forEach(verse => {
         let match;
-        // 重置正则匹配索引
         regex.lastIndex = 0; 
         while ((match = regex.exec(verse.text)) !== null) {
-            const strongsNumber = match[2]; // 捕获组 2 是编号，如 H430
+            const strongsNumber = match[2]; // 捕獲組 2 為 H8064
             foundStrongsNumbers.add(strongsNumber);
         }
     });
 
-    // 5. 保底机制：如果在经文中没提取到，去强氏字典里模糊搜索包含该字的条目
+    // 5. 保底機制：字典模糊搜索
     if (foundStrongsNumbers.size === 0) {
         console.log(`⚠️ 經文中未精確提取到編號，切換至字典模糊搜尋「${targetWord}」...`);
         for (const [sn, dictValue] of Object.entries(strongsDict || {})) {
@@ -284,12 +292,12 @@ function runReverseSearch() {
         }
     }
 
-    // 6. 渲染结果
+    // 6. 渲染結果
     renderReverseResults(Array.from(foundStrongsNumbers), targetWord);
 }
 
 /**
- * 渲染结果的页面排版函数（保持不变）
+ * 渲染結果的頁面排版函數（保持不變）
  */
 function renderReverseResults(strongsList, targetWord) {
     const resultContainer = document.getElementById('reverse-results');
@@ -306,7 +314,7 @@ function renderReverseResults(strongsList, targetWord) {
     resultContainer.innerHTML = '';
 
     if (strongsList.length === 0) {
-        resultContainer.innerHTML = `<div style="color: #e74c3c; padding: 15px; background: #fadbd8; border-radius: 4px; margin-top: 15px;">❌ 未找到「${targetWord}」在当前上下文对应的原文编号。</div>`;
+        resultContainer.innerHTML = `<div style="color: #e74c3c; padding: 15px; background: #fadbd8; border-radius: 4px; margin-top: 15px;">❌ 未找到「${targetWord}」在當前上下文對應的原文編號。</div>`;
         return;
     }
 
