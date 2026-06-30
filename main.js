@@ -220,55 +220,63 @@ function runReverseSearch() {
     }
 
     // ========================================================
-    // 🔥 以下為真正實現的反查邏輯（替換原本的 alert）
+    // 🔥 基于你的数据结构：使用正则表达式精准解析 字{编号}
     // ========================================================
     
-    // 1. 在加載好的聖經數據中，尋找包含用戶輸入的「參考經文」的章節
-    // 考慮到簡繁體，同時在繁體和簡體數據中匹配
+    // 1. 将用户输入的参考经文去除所有编号（比如用户可能从别处复制带编号的，也可能不带）
+    // 确保我们只拿纯汉字去数据库里做全局比对
+    const cleanInputText = rawInputText.replace(/\{[HG]\d+\}/g, '');
+
+    // 2. 在繁体/简体数据库中匹配该段经文
     let matchedVerses = [];
     
-    // 遍歷繁體經文
+    // 匹配时，要把数据库里带 {H1234} 的文本先剔除掉编号，再比对纯文本是否包含用户输入的句子
     bibleData.forEach(verse => {
-        if (verse.text && verse.text.includes(rawInputText)) {
-            matchedVerses.push(verse);
+        if (verse.text) {
+            const cleanVerseText = verse.text.replace(/\{[HG]\d+\}/g, '');
+            if (cleanVerseText.includes(cleanInputText)) {
+                matchedVerses.push(verse);
+            }
         }
     });
     
-    // 如果繁體沒找到，嘗試在簡體經文中找
     if (matchedVerses.length === 0) {
         bibleSimpData.forEach(verse => {
-            if (verse.text && verse.text.includes(rawInputText)) {
-                matchedVerses.push(verse);
+            if (verse.text) {
+                const cleanVerseText = verse.text.replace(/\{[HG]\d+\}/g, '');
+                if (cleanVerseText.includes(cleanInputText)) {
+                    matchedVerses.push(verse);
+                }
             }
         });
     }
 
-    // 2. 如果連經文都沒匹配到，說明輸入的參考文本太模糊或有錯別字
+    // 3. 如果没找到这段经文，给出提示
     if (matchedVerses.length === 0) {
-        alert(`❌ 在數據庫中找不到與「${rawInputText.substring(0, 10)}...」相匹配的聖經經文。請提供更精準、連續的經文字句。`);
+        alert(`❌ 在資料庫中找不到包含「${cleanInputText.substring(0, 10)}...」的經文。請確認字句是否正確。`);
         return;
     }
 
-    // 3. 收集這些經文裡包含目標中文字（如「愛」）的原文編號
-    const foundStrongsNumbers = new Set(); // 使用 Set 防止編號重複
+    // 4. 精准提取：在匹配到的经文原句中，找出带有目标字（如“神”或“创造”）的 {H/Gxxxx} 编号
+    const foundStrongsNumbers = new Set();
     
+    // 构建动态正则表达式。例如目标字是"神"，正则会匹配：神{H430} 或 包含"神"的词如 創造神{Hxxxx}
+    // 匹配规则：[^\{\}\s]* 允许目标字前后有其他汉字，紧跟着 {H1234} 或 {G1234}
+    const regex = new RegExp(`([^\\{\\}\\s]*${targetWord}[^\\{\\}\\s]*)\\{([HG]\\d+)\\}`, 'g');
+
     matchedVerses.forEach(verse => {
-        // 假設你的聖經數據結構（verse）中包含 w 數組或 strongs 數組
-        // 例如：verse.w = [["神", "H430"], ["愛", "H157"], ["世人", "H776"]]
-        // 請根據你實際的 JSON 格式調整下方 field 名稱（如 verse.words, verse.strongs 等）
-        const wordsArray = verse.w || verse.words || []; 
-        
-        wordsArray.forEach(item => {
-            // item[0] 通常是中文詞，item[1] 是強氏編號
-            if (Array.isArray(item) && item[0].includes(targetWord) && item[1]) {
-                foundStrongsNumbers.add(item[1]);
-            }
-        });
+        let match;
+        // 重置正则匹配索引
+        regex.lastIndex = 0; 
+        while ((match = regex.exec(verse.text)) !== null) {
+            const strongsNumber = match[2]; // 捕获组 2 是编号，如 H430
+            foundStrongsNumbers.add(strongsNumber);
+        }
     });
 
-    // 4. 如果在匹配到的經文中，沒找到這個中文字對應的編號，則擴大範圍到強氏字典中模糊搜索
+    // 5. 保底机制：如果在经文中没提取到，去强氏字典里模糊搜索包含该字的条目
     if (foundStrongsNumbers.size === 0) {
-        console.log(`⚠️ 經文精確匹配未找到編號，切換至強氏字典模糊搜索「${targetWord}」...`);
+        console.log(`⚠️ 經文中未精確提取到編號，切換至字典模糊搜尋「${targetWord}」...`);
         for (const [sn, dictValue] of Object.entries(strongsDict || {})) {
             if (dictValue && dictValue.includes(targetWord)) {
                 foundStrongsNumbers.add(sn);
@@ -276,20 +284,17 @@ function runReverseSearch() {
         }
     }
 
-    // 5. 渲染結果到前端界面
+    // 6. 渲染结果
     renderReverseResults(Array.from(foundStrongsNumbers), targetWord);
 }
 
 /**
- * 新增輔助函數：將反查到的強氏編號和字典釋義渲染到網頁上
+ * 渲染结果的页面排版函数（保持不变）
  */
 function renderReverseResults(strongsList, targetWord) {
-    // 假設你的 HTML 中有一個用於顯示結果的容器，例如 id="reverse-results"
-    // 如果沒有，請在 HTML 的反查面板（panel-reverse）中加入 <div id="reverse-results"></div>
     const resultContainer = document.getElementById('reverse-results');
     
     if (!resultContainer) {
-        // 如果找不到容器，退回到彈窗提示，但此時彈窗顯示的是真正查到的數據
         if (strongsList.length === 0) {
             alert(`找不到與「${targetWord}」相關的原文編號。`);
         } else {
@@ -298,28 +303,28 @@ function renderReverseResults(strongsList, targetWord) {
         return;
     }
 
-    resultContainer.innerHTML = ''; // 清空舊結果
+    resultContainer.innerHTML = '';
 
     if (strongsList.length === 0) {
-        resultContainer.innerHTML = `<div class="no-result">❌ 未找到「${targetWord}」對應的原文編號及字典條目。</div>`;
+        resultContainer.innerHTML = `<div style="color: #e74c3c; padding: 15px; background: #fadbd8; border-radius: 4px; margin-top: 15px;">❌ 未找到「${targetWord}」在当前上下文对应的原文编号。</div>`;
         return;
     }
 
-    // 構建結果 HTML
-    let html = `<h3>🔍 反查字「${targetWord}」對應的原文分析結果：</h3>`;
+    let html = `<h3 style="margin-top: 20px; color: #2c3e50;">🔍 反查字「${targetWord}」的原文分析：</h3>`;
     
     strongsList.forEach(sn => {
         const dictInfo = strongsDict[sn] || "字典中暫無此編號的詳細釋義";
-        // 判斷是希伯來文(旧约)還是希臘文(新约)
-        const langText = sn.startsWith('H') ? '📜 舊約希伯來文' : '📖 新約希臘文';
+        const isHebrew = sn.toUpperCase().startsWith('H');
+        const langText = isHebrew ? '📜 舊約希伯來文' : '📖 新約希臘文';
+        const badgeColor = isHebrew ? '#d35400' : '#2980b9';
         
         html += `
-            <div class="strongs-card" style="border: 1px solid #ddd; padding: 10px; margin-bottom: 10px; border-radius: 4px;">
-                <div style="font-weight: bold; color: #2980b9;">
-                    <span style="background: #e74c3c; color: white; padding: 2px 6px; border-radius: 3px; font-size: 12px; margin-right: 5px;">${langText}</span>
-                    編號：${sn}
+            <div class="strongs-card" style="border: 1px solid #e0e0e0; padding: 15px; margin-bottom: 12px; border-radius: 6px; background: #fff; box-shadow: 0 2px 4px rgba(0,0,0,0.02);">
+                <div style="font-weight: bold; font-size: 16px; margin-bottom: 8px;">
+                    <span style="background: ${badgeColor}; color: white; padding: 3px 8px; border-radius: 4px; font-size: 12px; margin-right: 8px; display: inline-block; vertical-align: middle;">${langText}</span>
+                    <span style="color: #2c3e50; vertical-align: middle;">編號：${sn}</span>
                 </div>
-                <div style="margin-top: 5px; color: #34495e; font-size: 14px; white-space: pre-line;">
+                <div style="color: #555; font-size: 14px; line-height: 1.6; white-space: pre-line; background: #f9f9f9; padding: 10px; border-radius: 4px;">
                     ${dictInfo}
                 </div>
             </div>
