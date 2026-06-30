@@ -298,10 +298,7 @@ function runReverseSearch() {
 
 
 /**
- * 🎯 與 web.js 中的 StrongSearchBuilder 完美串聯的渲染函數
- */
-/**
- * 🎯 優化排版版：一個項目換一個新行，告別密密麻麻的文本
+ * 🎯 精美層級排版版：自動計算多級縮進，並對編號與譯文進行顏色微調
  */
 function renderReverseResults(strongsList, targetWord) {
     const resultContainer = document.getElementById('reverse-results');
@@ -322,23 +319,59 @@ function renderReverseResults(strongsList, targetWord) {
         return;
     }
 
-    // 💡 內部輔助排版函數：自動將 1), 1a), 1a1) 等編號切換到新行
-    const formatDefinitionToLines = (text) => {
+    // 💡 核心排版引擎：動態計算縮進與顏色微調
+    const formatDefinitionToHierarchicalHtml = (text, badgeColor) => {
         if (!text) return '';
         
-        // 1. 先用正則表達式，在所有類似 1), 2), 1a), 1a1) 的編號前面強行塞入換行符和點點
-        // (?=\b\d+[a-z]?\d*\)) 是一個正向預查，能精準定位到編號開頭
-        let formatted = text.replace(/(?=\b\d+[a-z]?\d*\))/g, '<br>• ');
+        // 1. 使用正則表達式，在所有 1), 2), 1a), 1a1) 編號前插入自定義分隔符 [SPLIT]
+        let preparedText = text.replace(/(?=\b\d+[a-z]?\d*\))/g, '[SPLIT]');
+        const items = preparedText.split('[SPLIT]');
         
-        // 2. 修復開頭可能多出來的換行符
-        if (formatted.startsWith('<br>')) {
-            formatted = formatted.substring(4);
-        }
+        let finalHtml = '';
         
-        // 3. 將原有的分號稍微美化，讓中英文混排更好看
-        formatted = formatted.replace(/;\s*/g, '； ');
+        items.forEach((item, index) => {
+            let trimmed = item.trim();
+            if (!trimmed) return;
+            
+            // 將英文分號替換為更顯眼、間距更好的全形分號
+            trimmed = trimmed.replace(/;\s*/g, '； ');
+
+            // 2. 匹配條目開頭的編號（如 1a1)）
+            const numMatch = trimmed.match(/^(\d+[a-z]?\d*\))/);
+            
+            if (numMatch) {
+                const fullNum = numMatch[1]; // 提取出 "1a1)"
+                const content = trimmed.substring(fullNum.length).trim(); // 提取出後面的譯文文本
+                
+                // 3. 根據編號長度動態計算層級與縮進 (長度 2=1级, 長度 3=2级, 長度 4或以上=3级)
+                let indentLevel = 0;
+                if (fullNum.length === 3) indentLevel = 1;      // 例如 "1a)"
+                if (fullNum.length >= 4) indentLevel = 2;      // 例如 "1a1)"
+                
+                const paddingLeft = indentLevel * 20; // 每多一級，向右縮進 20px
+                
+                // 4. 根據層級微調字體顏色與粗細 (主條目加粗加深，深層條目顏色稍淡)
+                const numColor = badgeColor; // 編號顏色與卡片主題色（橘/藍）保持一致
+                const textColor = indentLevel === 0 ? '#2c3e50' : (indentLevel === 1 ? '#475569' : '#64748b');
+                const fontWeight = indentLevel === 0 ? 'bold' : 'normal';
+
+                finalHtml += `
+                    <div style="padding-left: ${paddingLeft}px; margin-bottom: 6px; line-height: 1.6; text-align: left;">
+                        <span style="color: ${numColor}; font-weight: bold; font-family: monospace; margin-right: 6px;">• ${fullNum}</span>
+                        <span style="color: ${textColor}; font-weight: ${fontWeight};">${content}</span>
+                    </div>
+                `;
+            } else {
+                // 如果是開頭的原文單詞或基礎意義（沒有編號的部分）
+                finalHtml += `
+                    <div style="font-size: 15px; font-weight: bold; color: #1e293b; margin-bottom: 12px; border-bottom: 1px dashed #e2e8f0; padding-bottom: 8px; text-align: left;">
+                        ${trimmed}
+                    </div>
+                `;
+            }
+        });
         
-        return formatted;
+        return finalHtml;
     };
 
     let html = `<h3 style="margin-top: 20px; color: #2c3e50;">🔍 反查字「${targetWord}」的原文分析：</h3>`;
@@ -351,7 +384,6 @@ function renderReverseResults(strongsList, targetWord) {
     strongsList.forEach(sn => {
         let dictInfo = "字典中暫無此編號的詳細釋義";
         
-        // 優先獲取原始字典文本
         if (builderInstance && builderInstance.strongsDict && builderInstance.strongsDict[sn]) {
             dictInfo = builderInstance.strongsDict[sn];
         } else if (typeof strongsDict !== 'undefined' && strongsDict[sn]) {
@@ -362,19 +394,19 @@ function renderReverseResults(strongsList, targetWord) {
 
         const isHebrew = sn.toUpperCase().startsWith('H');
         const langText = isHebrew ? '📜 舊約希伯來文' : '📖 新約希臘文';
-        const badgeColor = isHebrew ? '#d35400' : '#2980b9';
+        const badgeColor = isHebrew ? '#d35400' : '#2980b9'; // 舊約溫暖橘，新約深邃藍
         
-        // 💡 核心改動：對內容進行動態換行排版處理
-        const beautifullyFormattedText = formatDefinitionToLines(dictInfo);
+        // 💡 核心改動：套用全新的多級層級排版引擎
+        const structuredHtml = formatDefinitionToHierarchicalHtml(dictInfo, badgeColor);
 
         html += `
-            <div class="strongs-card" style="border: 1px solid #e0e0e0; padding: 15px; margin-bottom: 12px; border-radius: 6px; background: #fff; box-shadow: 0 2px 4px rgba(0,0,0,0.02); text-align: left;">
-                <div style="font-weight: bold; font-size: 16px; margin-bottom: 10px;">
-                    <span style="background: ${badgeColor}; color: white; padding: 3px 8px; border-radius: 4px; font-size: 12px; margin-right: 8px; display: inline-block; vertical-align: middle;">${langText}</span>
-                    <span style="color: #2c3e50; vertical-align: middle;">編號：${sn}</span>
+            <div class="strongs-card" style="border: 1px solid #e2e8f0; padding: 18px; margin-bottom: 16px; border-radius: 8px; background: #fff; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05), 0 2px 4px -1px rgba(0,0,0,0.03);">
+                <div style="font-weight: bold; font-size: 16px; margin-bottom: 14px; text-align: left;">
+                    <span style="background: ${badgeColor}; color: white; padding: 4px 10px; border-radius: 4px; font-size: 12px; margin-right: 10px; display: inline-block; vertical-align: middle;">${langText}</span>
+                    <span style="color: #1e293b; vertical-align: middle; letter-spacing: 0.5px;">編號：${sn}</span>
                 </div>
-                <div style="color: #34495e; font-size: 14px; line-height: 1.8; background: #f8f9fa; padding: 12px 15px; border-radius: 6px; border-left: 4px solid ${badgeColor};">
-                    ${beautifullyFormattedText}
+                <div style="background: #f8fafc; padding: 16px; border-radius: 8px; border-left: 4px solid ${badgeColor}; font-size: 14px;">
+                    ${structuredHtml}
                 </div>
             </div>
         `;
