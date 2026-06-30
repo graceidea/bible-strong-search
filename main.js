@@ -300,6 +300,9 @@ function runReverseSearch() {
 /**
  * 🎯 與 web.js 中的 StrongSearchBuilder 完美串聯的渲染函數
  */
+/**
+ * 🎯 優化排版版：一個項目換一個新行，告別密密麻麻的文本
+ */
 function renderReverseResults(strongsList, targetWord) {
     const resultContainer = document.getElementById('reverse-results');
     
@@ -319,9 +322,27 @@ function renderReverseResults(strongsList, targetWord) {
         return;
     }
 
+    // 💡 內部輔助排版函數：自動將 1), 1a), 1a1) 等編號切換到新行
+    const formatDefinitionToLines = (text) => {
+        if (!text) return '';
+        
+        // 1. 先用正則表達式，在所有類似 1), 2), 1a), 1a1) 的編號前面強行塞入換行符和點點
+        // (?=\b\d+[a-z]?\d*\)) 是一個正向預查，能精準定位到編號開頭
+        let formatted = text.replace(/(?=\b\d+[a-z]?\d*\))/g, '<br>• ');
+        
+        // 2. 修復開頭可能多出來的換行符
+        if (formatted.startsWith('<br>')) {
+            formatted = formatted.substring(4);
+        }
+        
+        // 3. 將原有的分號稍微美化，讓中英文混排更好看
+        formatted = formatted.replace(/;\s*/g, '； ');
+        
+        return formatted;
+    };
+
     let html = `<h3 style="margin-top: 20px; color: #2c3e50;">🔍 反查字「${targetWord}」的原文分析：</h3>`;
     
-    // 💡 核心串聯：獲取 web.js 中 StrongSearchBuilder 的單例對象
     let builderInstance = null;
     if (typeof StrongSearchBuilder !== 'undefined') {
         builderInstance = StrongSearchBuilder.getInstance();
@@ -330,48 +351,33 @@ function renderReverseResults(strongsList, targetWord) {
     strongsList.forEach(sn => {
         let dictInfo = "字典中暫無此編號的詳細釋義";
         
-        // 1. 優先嘗試從 web.js 的標準單例或自帶方法中獲取定義
-        if (typeof getLocalStrongsDefinitionHtml === 'function') {
-            // 如果 web.js 中有全局的獲取 HTML 函數，直接調用它
-            dictInfo = getLocalStrongsDefinitionHtml(sn);
-        } else if (builderInstance && builderInstance.strongsDict && builderInstance.strongsDict[sn]) {
-            // 如果函數在實例內部，則從實例的字典字典中讀取
+        // 優先獲取原始字典文本
+        if (builderInstance && builderInstance.strongsDict && builderInstance.strongsDict[sn]) {
             dictInfo = builderInstance.strongsDict[sn];
         } else if (typeof strongsDict !== 'undefined' && strongsDict[sn]) {
-            // 保底讀取全局字典
             dictInfo = strongsDict[sn];
+        } else if (typeof getLocalStrongsDefinitionHtml === 'function') {
+            dictInfo = getLocalStrongsDefinitionHtml(sn);
         }
 
         const isHebrew = sn.toUpperCase().startsWith('H');
         const langText = isHebrew ? '📜 舊約希伯來文' : '📖 新約希臘文';
         const badgeColor = isHebrew ? '#d35400' : '#2980b9';
         
-        // 2. 如果 getLocalStrongsDefinitionHtml 返回的是現成的完整 HTML 結構，直接嵌入
-        // 否則，套用標準外殼進行精美包裝
-        if (dictInfo.includes('<div') || dictInfo.includes('<span')) {
-            html += `
-                <div class="strongs-card" style="border: 1px solid #e0e0e0; padding: 15px; margin-bottom: 12px; border-radius: 6px; background: #fff; box-shadow: 0 2px 4px rgba(0,0,0,0.02);">
-                    <div style="font-weight: bold; font-size: 16px; margin-bottom: 8px;">
-                        <span style="background: ${badgeColor}; color: white; padding: 3px 8px; border-radius: 4px; font-size: 12px; margin-right: 8px; display: inline-block; vertical-align: middle;">${langText}</span>
-                        <span style="color: #2c3e50; vertical-align: middle;">編號：${sn}</span>
-                    </div>
-                    <div>${dictInfo}</div>
+        // 💡 核心改動：對內容進行動態換行排版處理
+        const beautifullyFormattedText = formatDefinitionToLines(dictInfo);
+
+        html += `
+            <div class="strongs-card" style="border: 1px solid #e0e0e0; padding: 15px; margin-bottom: 12px; border-radius: 6px; background: #fff; box-shadow: 0 2px 4px rgba(0,0,0,0.02); text-align: left;">
+                <div style="font-weight: bold; font-size: 16px; margin-bottom: 10px;">
+                    <span style="background: ${badgeColor}; color: white; padding: 3px 8px; border-radius: 4px; font-size: 12px; margin-right: 8px; display: inline-block; vertical-align: middle;">${langText}</span>
+                    <span style="color: #2c3e50; vertical-align: middle;">編號：${sn}</span>
                 </div>
-            `;
-        } else {
-            // 纯文本内容的保底精美渲染
-            html += `
-                <div class="strongs-card" style="border: 1px solid #e0e0e0; padding: 15px; margin-bottom: 12px; border-radius: 6px; background: #fff; box-shadow: 0 2px 4px rgba(0,0,0,0.02);">
-                    <div style="font-weight: bold; font-size: 16px; margin-bottom: 8px;">
-                        <span style="background: ${badgeColor}; color: white; padding: 3px 8px; border-radius: 4px; font-size: 12px; margin-right: 8px; display: inline-block; vertical-align: middle;">${langText}</span>
-                        <span style="color: #2c3e50; vertical-align: middle;">編號：${sn}</span>
-                    </div>
-                    <div style="color: #555; font-size: 14px; line-height: 1.6; white-space: pre-line; background: #f9f9f9; padding: 10px; border-radius: 4px;">
-                        ${dictInfo}
-                    </div>
+                <div style="color: #34495e; font-size: 14px; line-height: 1.8; background: #f8f9fa; padding: 12px 15px; border-radius: 6px; border-left: 4px solid ${badgeColor};">
+                    ${beautifullyFormattedText}
                 </div>
-            `;
-        }
+            </div>
+        `;
     });
 
     resultContainer.innerHTML = html;
