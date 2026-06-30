@@ -296,8 +296,9 @@ function runReverseSearch() {
     renderReverseResults(Array.from(foundStrongsNumbers), targetWord);
 }
 
+
 /**
- * 渲染結果的頁面排版函數（保持不變）
+ * 🎯 與 web.js 中的 StrongSearchBuilder 完美串聯的渲染函數
  */
 function renderReverseResults(strongsList, targetWord) {
     const resultContainer = document.getElementById('reverse-results');
@@ -306,7 +307,7 @@ function renderReverseResults(strongsList, targetWord) {
         if (strongsList.length === 0) {
             alert(`找不到與「${targetWord}」相關的原文編號。`);
         } else {
-            alert(`反查成功！「${targetWord}」可能對應的原文編號有：\n${strongsList.join(', ')}\n\n(建議在 HTML 中添加 id="reverse-results" 的 div 標籤以獲得更好的視覺排版)`);
+            alert(`反查成功！「${targetWord}」可能對應的原文編號有：\n${strongsList.join(', ')}`);
         }
         return;
     }
@@ -320,28 +321,61 @@ function renderReverseResults(strongsList, targetWord) {
 
     let html = `<h3 style="margin-top: 20px; color: #2c3e50;">🔍 反查字「${targetWord}」的原文分析：</h3>`;
     
+    // 💡 核心串聯：獲取 web.js 中 StrongSearchBuilder 的單例對象
+    let builderInstance = null;
+    if (typeof StrongSearchBuilder !== 'undefined') {
+        builderInstance = StrongSearchBuilder.getInstance();
+    }
+
     strongsList.forEach(sn => {
-        const dictInfo = strongsDict[sn] || "字典中暫無此編號的詳細釋義";
+        let dictInfo = "字典中暫無此編號的詳細釋義";
+        
+        // 1. 優先嘗試從 web.js 的標準單例或自帶方法中獲取定義
+        if (typeof getLocalStrongsDefinitionHtml === 'function') {
+            // 如果 web.js 中有全局的獲取 HTML 函數，直接調用它
+            dictInfo = getLocalStrongsDefinitionHtml(sn);
+        } else if (builderInstance && builderInstance.strongsDict && builderInstance.strongsDict[sn]) {
+            // 如果函數在實例內部，則從實例的字典字典中讀取
+            dictInfo = builderInstance.strongsDict[sn];
+        } else if (typeof strongsDict !== 'undefined' && strongsDict[sn]) {
+            // 保底讀取全局字典
+            dictInfo = strongsDict[sn];
+        }
+
         const isHebrew = sn.toUpperCase().startsWith('H');
         const langText = isHebrew ? '📜 舊約希伯來文' : '📖 新約希臘文';
         const badgeColor = isHebrew ? '#d35400' : '#2980b9';
         
-        html += `
-            <div class="strongs-card" style="border: 1px solid #e0e0e0; padding: 15px; margin-bottom: 12px; border-radius: 6px; background: #fff; box-shadow: 0 2px 4px rgba(0,0,0,0.02);">
-                <div style="font-weight: bold; font-size: 16px; margin-bottom: 8px;">
-                    <span style="background: ${badgeColor}; color: white; padding: 3px 8px; border-radius: 4px; font-size: 12px; margin-right: 8px; display: inline-block; vertical-align: middle;">${langText}</span>
-                    <span style="color: #2c3e50; vertical-align: middle;">編號：${sn}</span>
+        // 2. 如果 getLocalStrongsDefinitionHtml 返回的是現成的完整 HTML 結構，直接嵌入
+        // 否則，套用標準外殼進行精美包裝
+        if (dictInfo.includes('<div') || dictInfo.includes('<span')) {
+            html += `
+                <div class="strongs-card" style="border: 1px solid #e0e0e0; padding: 15px; margin-bottom: 12px; border-radius: 6px; background: #fff; box-shadow: 0 2px 4px rgba(0,0,0,0.02);">
+                    <div style="font-weight: bold; font-size: 16px; margin-bottom: 8px;">
+                        <span style="background: ${badgeColor}; color: white; padding: 3px 8px; border-radius: 4px; font-size: 12px; margin-right: 8px; display: inline-block; vertical-align: middle;">${langText}</span>
+                        <span style="color: #2c3e50; vertical-align: middle;">編號：${sn}</span>
+                    </div>
+                    <div>${dictInfo}</div>
                 </div>
-                <div style="color: #555; font-size: 14px; line-height: 1.6; white-space: pre-line; background: #f9f9f9; padding: 10px; border-radius: 4px;">
-                    ${dictInfo}
+            `;
+        } else {
+            // 纯文本内容的保底精美渲染
+            html += `
+                <div class="strongs-card" style="border: 1px solid #e0e0e0; padding: 15px; margin-bottom: 12px; border-radius: 6px; background: #fff; box-shadow: 0 2px 4px rgba(0,0,0,0.02);">
+                    <div style="font-weight: bold; font-size: 16px; margin-bottom: 8px;">
+                        <span style="background: ${badgeColor}; color: white; padding: 3px 8px; border-radius: 4px; font-size: 12px; margin-right: 8px; display: inline-block; vertical-align: middle;">${langText}</span>
+                        <span style="color: #2c3e50; vertical-align: middle;">編號：${sn}</span>
+                    </div>
+                    <div style="color: #555; font-size: 14px; line-height: 1.6; white-space: pre-line; background: #f9f9f9; padding: 10px; border-radius: 4px;">
+                        ${dictInfo}
+                    </div>
                 </div>
-            </div>
-        `;
+            `;
+        }
     });
 
     resultContainer.innerHTML = html;
 }
-
 
 // ==========================================
 // 鍵盤快捷鍵
