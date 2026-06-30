@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>聖經原文多功能查詢系統</title>
     <link rel="stylesheet" href="style.css">
-    
     <!-- 🎯 補上 CSS 樣式：確保滑鼠移到「ℹ️ 字典定義」時能正常跳出彈窗 -->
     <style>
         .strongs-tooltip {
@@ -23,7 +22,6 @@
     </style>
 </head>
 <body>
-
     <div class="search-container">
         <h1>🔍 聖經原文多功能查詢系統</h1>
         
@@ -32,9 +30,9 @@
             <button class="tab-btn" onclick="switchMode('reverse')">原文反查模式</button>
         </div>
 
+        <!-- 關鍵字搜尋面板 -->
         <div id="panel-keyword" class="search-panel active">
             <input type="text" id="keyword" placeholder="請輸入中文關鍵字（支援簡繁自動轉換，如：光、忍耐）" onkeyup="if(event.key==='Enter') runSearch()">
-            
             <!-- 💡 書卷過濾下拉選單（JavaScript 會在 window.onload 時自動把 66 卷書塞進這裡） -->
             <select id="book-filter" style="padding: 10px; font-size: 16px; border: 1px solid #ccc; border-radius: 4px; outline: none; background: #fff; cursor: pointer;">
                 <option value="all">🔍 所有書卷（全部）</option>
@@ -42,15 +40,20 @@
             <button onclick="runSearch()">搜尋</button>
         </div>
 
+        <!-- 原文反查模式面板 -->
         <div id="panel-reverse" class="search-panel">
             <textarea id="reverse-text" placeholder="請貼上聖經內文（例如：神愛世人，甚至將祂的獨生子...）" rows="3"></textarea>
             <input type="text" id="reverse-target" placeholder="想要反查的特定字眼（例如：愛）">
             <button onclick="runReverseSearch()">精準反查原文</button>
+            
+            <!-- 🎯 核心補入：專門用來接收並渲染「原文反查結果」的容器 -->
+            <div id="reverse-results" style="margin-top: 20px; text-align: left;"></div>
         </div>
 
         <div id="status" class="status">正在載入聖經資料庫...</div>
     </div>
 
+    <!-- 關鍵字搜尋的結果顯示區域 -->
     <div id="results-area" style="display: none;">
         <div class="testament-header" style="background:#8e44ad;">📖 舊約部分 <span id="ot-count" class="count-badge"></span></div>
         <div id="ot-results"><p class="no-result">無結果</p></div>
@@ -61,39 +64,8 @@
 
     <!-- 🎯 優化點 1：刪除了原本重複引入兩次的 s2t-t2s 簡繁轉換工具，保留一個即可 -->
     <script src="https://cdn.jsdelivr.net/npm/s2t-t2s@1.0.3/dist/s2t-t2s.min.js"></script>
-    
     <script src="config.js"></script>
-    
     <script src="web.js"></script>
     <script src="main.js"></script>
-
-    <!-- 
-    备忘录：已加载的脚本功能说明
-
-    tools.js 的功能：
-    1. 強效字串清洗工具 (拔除所有原文標籤與括號雜質)
-       - function cleanStrongs(text)
-    2. 原文編號排序規則 (按字母與數字大小升序)
-       - function sortStrongIds(a, b)
-    3. HTML 安全字元轉義 (防止特殊符號破壞網頁結構)
-       - function escapeHtml(str)
-
-    web.js 的功能：
-    1. 生成表格 HTML 與精準編號染色邏輯
-       - function buildSectionsHtml(groups, keyword)
-    2. 獲取本地辭典定義 HTML
-       - function getLocalStrongsDefinitionHtml(strongId)
-
-    main.js 的功能：
-    1. 初始化與異步加載三大 JSON 資料庫
-       - window.onload = function()
-    2. 關鍵字搜尋核心業務邏輯
-       - function runSearch()
-    3. 頁籤切換功能
-       - function switchMode(mode)
-    4. 原文反查留空
-       - function runReverseSearch()
-    -->
-
 </body>
 </html>
