@@ -5,19 +5,205 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>聖經原文多功能查詢系統</title>
     <link rel="stylesheet" href="style.css">
-    <!-- 🎯 補上 CSS 樣式：確保滑鼠移到「ℹ️ 字典定義」時能正常跳出彈窗 -->
+    
     <style>
         .strongs-tooltip {
             position: relative;
             display: inline-block;
         }
-        /* 預設隱藏彈窗 */
         .strongs-tooltip .tooltip-content {
             display: none !important;
         }
-        /* 滑鼠懸浮（Hover）時顯示彈窗 */
         .strongs-tooltip:hover .tooltip-content {
             display: block !important;
+        }
+        
+        .search-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        .tabs {
+            display: flex;
+            gap: 10px;
+            margin: 20px 0;
+        }
+        
+        .tab-btn {
+            padding: 10px 20px;
+            border: 2px solid #ddd;
+            background: #f5f5f5;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: all 0.3s;
+        }
+        
+        .tab-btn.active {
+            background: #3498db;
+            color: white;
+            border-color: #3498db;
+        }
+        
+        .tab-btn:hover {
+            background: #e0e0e0;
+        }
+        
+        .tab-btn.active:hover {
+            background: #2980b9;
+        }
+        
+        .search-panel {
+            display: none;
+            padding: 20px;
+            background: #f9f9f9;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+        
+        .search-panel.active {
+            display: block;
+        }
+        
+        /* ✅ 关键词搜索面板 - 水平布局 */
+        #panel-keyword {
+            display: none;
+            gap: 10px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+        
+        #panel-keyword.active {
+            display: flex;
+        }
+        
+        #panel-keyword input {
+            flex: 2;
+            min-width: 200px;
+            padding: 10px;
+            font-size: 16px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+        
+        #panel-keyword select {
+            flex: 1;
+            min-width: 150px;
+            padding: 10px;
+            font-size: 16px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            background: white;
+            cursor: pointer;
+        }
+        
+        #panel-keyword button {
+            padding: 10px 30px;
+            font-size: 16px;
+            background: #27ae60;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+        
+        #panel-keyword button:hover {
+            background: #219a52;
+        }
+        
+        /* ✅ 反向搜索面板 - 垂直布局 */
+        #panel-reverse {
+            display: none;
+            flex-direction: column;
+        }
+        
+        #panel-reverse.active {
+            display: flex;
+        }
+        
+        #panel-reverse textarea {
+            width: 100%;
+            padding: 10px;
+            font-size: 16px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            margin-bottom: 10px;
+            box-sizing: border-box;
+            font-family: inherit;
+            resize: vertical;
+            min-height: 80px;
+        }
+        
+        #panel-reverse input {
+            width: 100%;
+            padding: 10px;
+            font-size: 16px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            margin-bottom: 10px;
+            box-sizing: border-box;
+        }
+        
+        #panel-reverse button {
+            width: 100%;
+            padding: 10px;
+            font-size: 16px;
+            background: #e67e22;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+        
+        #panel-reverse button:hover {
+            background: #d35400;
+        }
+        
+        .status {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+            background: #ecf0f1;
+            color: #2c3e50;
+            transition: all 0.3s;
+        }
+        
+        #results-area {
+            max-width: 1200px;
+            margin: 20px auto;
+            padding: 0 20px;
+        }
+        
+        .testament-header {
+            padding: 12px 20px;
+            border-radius: 8px;
+            margin: 20px 0 10px 0;
+            color: white;
+            font-weight: bold;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .count-badge {
+            background: rgba(255,255,255,0.3);
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 14px;
+        }
+        
+        .no-result {
+            color: #999;
+            text-align: center;
+            padding: 20px;
+        }
+        
+        #reverse-results {
+            margin-top: 20px;
+            text-align: left;
         }
     </style>
 </head>
@@ -30,42 +216,87 @@
             <button class="tab-btn" onclick="switchMode('reverse')">原文反查模式</button>
         </div>
 
-        <!-- 關鍵字搜尋面板 -->
+        <!-- ========================================== -->
+        <!-- ✅ 關鍵字搜尋面板                          -->
+        <!-- ========================================== -->
         <div id="panel-keyword" class="search-panel active">
             <input type="text" id="keyword" placeholder="請輸入中文關鍵字（支援簡繁自動轉換，如：光、忍耐）" onkeyup="if(event.key==='Enter') runSearch()">
-            <!-- 💡 書卷過濾下拉選單（JavaScript 會在 window.onload 時自動把 66 卷書塞進這裡） -->
-            <select id="book-filter" style="padding: 10px; font-size: 16px; border: 1px solid #ccc; border-radius: 4px; outline: none; background: #fff; cursor: pointer;">
+            <select id="book-filter">
                 <option value="all">🔍 所有書卷（全部）</option>
             </select>
             <button onclick="runSearch()">搜尋</button>
         </div>
 
-        <!-- 原文反查模式面板 -->
+        <!-- ========================================== -->
+        <!-- ✅ 原文反查模式面板                        -->
+        <!-- ========================================== -->
         <div id="panel-reverse" class="search-panel">
             <textarea id="reverse-text" placeholder="請貼上聖經內文（例如：神愛世人，甚至將祂的獨生子...）" rows="3"></textarea>
             <input type="text" id="reverse-target" placeholder="想要反查的特定字眼（例如：愛）">
             <button onclick="runReverseSearch()">精準反查原文</button>
-            
-            <!-- 🎯 核心補入：專門用來接收並渲染「原文反查結果」的容器 -->
-            <div id="reverse-results" style="margin-top: 20px; text-align: left;"></div>
+            <div id="reverse-results"></div>
         </div>
 
         <div id="status" class="status">正在載入聖經資料庫...</div>
     </div>
 
-    <!-- 關鍵字搜尋的結果顯示區域 -->
+    <!-- ========================================== -->
+    <!-- 關鍵字搜尋的結果顯示區域                    -->
+    <!-- ========================================== -->
     <div id="results-area" style="display: none;">
-        <div class="testament-header" style="background:#8e44ad;">📖 舊約部分 <span id="ot-count" class="count-badge"></span></div>
+        <div class="testament-header" style="background:#8e44ad;">
+            📖 舊約部分 
+            <span id="ot-count" class="count-badge">0</span>
+        </div>
         <div id="ot-results"><p class="no-result">無結果</p></div>
 
-        <div class="testament-header" style="background:#2980b9;">📖 新約部分 <span id="nt-count" class="count-badge"></span></div>
+        <div class="testament-header" style="background:#2980b9;">
+            📖 新約部分 
+            <span id="nt-count" class="count-badge">0</span>
+        </div>
         <div id="nt-results"><p class="no-result">無結果</p></div>
     </div>
 
-    <!-- 🎯 優化點 1：刪除了原本重複引入兩次的 s2t-t2s 簡繁轉換工具，保留一個即可 -->
+    <!-- ============================================ -->
+    <!-- JavaScript 引用                              -->
+    <!-- ============================================ -->
+    
     <script src="https://cdn.jsdelivr.net/npm/s2t-t2s@1.0.3/dist/s2t-t2s.min.js"></script>
-    <script src="config.js"></script>
-    <script src="web.js"></script>
-    <script src="main.js"></script>
+    <script src="index.js"></script>
+    <script src="src/config.js"></script>
+    <script src="src/web.js"></script>
+    <script src="src/main.js"></script>
+
+    <script>
+        (function() {
+            console.log('🚀 聖經原文多功能查詢系統啟動中...');
+            console.log('📁 數據路徑: data/');
+            console.log('📁 源碼路徑: src/');
+            
+            const checks = [
+                { name: 'runSearch', required: true },
+                { name: 'runReverseSearch', required: true },
+                { name: 'switchMode', required: true },
+                { name: 'populateBookFilter', required: true }
+            ];
+            
+            let allLoaded = true;
+            console.log('📋 检查函数加载状态:');
+            checks.forEach(({ name, required }) => {
+                const loaded = typeof window[name] === 'function';
+                console.log(`  ${loaded ? '✅' : '❌'} ${name}`);
+                if (required && !loaded) allLoaded = false;
+            });
+            
+            if (allLoaded) {
+                console.log('✅ 所有核心函数已加载完成');
+                console.log('💡 可用命令:');
+                console.log('  runSearch()         - 关键词搜索');
+                console.log('  runReverseSearch()  - 反向搜索');
+                console.log('  switchMode("keyword") - 切换到关键词模式');
+                console.log('  switchMode("reverse")  - 切换到反向模式');
+            }
+        })();
+    </script>
 </body>
 </html>
