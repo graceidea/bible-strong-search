@@ -1,302 +1,312 @@
 <!DOCTYPE html>
 <html lang="zh-TW">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>聖經原文多功能查詢系統</title>
-    <link rel="stylesheet" href="style.css">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>聖經原文多功能查詢系統</title>
+  <link rel="stylesheet" href="style.css">
+  <style>
+    .strongs-tooltip { position: relative; display: inline-block; }
+    .strongs-tooltip .tooltip-content { display: none !important; }
+    .strongs-tooltip:hover .tooltip-content { display: block !important; }
+    .search-container { max-width: 1200px; margin: 0 auto; padding: 20px; }
+    .tabs { display: flex; gap: 10px; margin: 20px 0; flex-wrap: wrap; }
+    .tab-btn { padding: 10px 20px; border: 2px solid #ddd; background: #f5f5f5; border-radius: 5px; cursor: pointer; font-size: 16px; transition: all 0.3s; }
+    .tab-btn.active { background: #3498db; color: white; border-color: #3498db; }
+    .tab-btn:hover { background: #e0e0e0; }
+    .tab-btn.active:hover { background: #2980b9; }
+    .search-panel { display: none; padding: 20px; background: #f9f9f9; border-radius: 8px; margin-bottom: 20px; }
+    .search-panel.active { display: block; }
     
-    <style>
-        .strongs-tooltip {
-            position: relative;
-            display: inline-block;
-        }
-        .strongs-tooltip .tooltip-content {
-            display: none !important;
-        }
-        .strongs-tooltip:hover .tooltip-content {
-            display: block !important;
-        }
-        
-        .search-container {
-            max-width: 1200px;
-            margin: 0 auto;
-            padding: 20px;
-        }
-        
-        .tabs {
-            display: flex;
-            gap: 10px;
-            margin: 20px 0;
-        }
-        
-        .tab-btn {
-            padding: 10px 20px;
-            border: 2px solid #ddd;
-            background: #f5f5f5;
-            border-radius: 5px;
-            cursor: pointer;
-            font-size: 16px;
-            transition: all 0.3s;
-        }
-        
-        .tab-btn.active {
-            background: #3498db;
-            color: white;
-            border-color: #3498db;
-        }
-        
-        .tab-btn:hover {
-            background: #e0e0e0;
-        }
-        
-        .tab-btn.active:hover {
-            background: #2980b9;
-        }
-        
-        .search-panel {
-            display: none;
-            padding: 20px;
-            background: #f9f9f9;
-            border-radius: 8px;
-            margin-bottom: 20px;
-        }
-        
-        .search-panel.active {
-            display: block;
-        }
-        
-        /* ✅ 关键词搜索面板 - 水平布局 */
-        #panel-keyword {
-            display: none;
-            gap: 10px;
-            flex-wrap: wrap;
-            align-items: center;
-        }
-        
-        #panel-keyword.active {
-            display: flex;
-        }
-        
-        #panel-keyword input {
-            flex: 2;
-            min-width: 200px;
-            padding: 10px;
-            font-size: 16px;
-            border: 1px solid #ccc;
-            border-radius: 4px;
-        }
-        
-        #panel-keyword select {
-            flex: 1;
-            min-width: 150px;
-            padding: 10px;
-            font-size: 16px;
-            border: 1px solid #ccc;
-            border-radius: 4px;
-            background: white;
-            cursor: pointer;
-        }
-        
-        #panel-keyword button {
-            padding: 10px 30px;
-            font-size: 16px;
-            background: #27ae60;
-            color: white;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-            transition: background 0.3s;
-        }
-        
-        #panel-keyword button:hover {
-            background: #219a52;
-        }
-        
-        /* ✅ 反向搜索面板 - 垂直布局 */
-        #panel-reverse {
-            display: none;
-            flex-direction: column;
-        }
-        
-        #panel-reverse.active {
-            display: flex;
-        }
-        
-        #panel-reverse textarea {
-            width: 100%;
-            padding: 10px;
-            font-size: 16px;
-            border: 1px solid #ccc;
-            border-radius: 4px;
-            margin-bottom: 10px;
-            box-sizing: border-box;
-            font-family: inherit;
-            resize: vertical;
-            min-height: 80px;
-        }
-        
-        #panel-reverse input {
-            width: 100%;
-            padding: 10px;
-            font-size: 16px;
-            border: 1px solid #ccc;
-            border-radius: 4px;
-            margin-bottom: 10px;
-            box-sizing: border-box;
-        }
-        
-        #panel-reverse button {
-            width: 100%;
-            padding: 10px;
-            font-size: 16px;
-            background: #e67e22;
-            color: white;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-            transition: background 0.3s;
-        }
-        
-        #panel-reverse button:hover {
-            background: #d35400;
-        }
-        
-        .status {
-            padding: 10px;
-            margin: 10px 0;
-            border-radius: 4px;
-            background: #ecf0f1;
-            color: #2c3e50;
-            transition: all 0.3s;
-        }
-        
-        #results-area {
-            max-width: 1200px;
-            margin: 20px auto;
-            padding: 0 20px;
-        }
-        
-        .testament-header {
-            padding: 12px 20px;
-            border-radius: 8px;
-            margin: 20px 0 10px 0;
-            color: white;
-            font-weight: bold;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-        
-        .count-badge {
-            background: rgba(255,255,255,0.3);
-            padding: 4px 12px;
-            border-radius: 20px;
-            font-size: 14px;
-        }
-        
-        .no-result {
-            color: #999;
-            text-align: center;
-            padding: 20px;
-        }
-        
-        #reverse-results {
-            margin-top: 20px;
-            text-align: left;
-        }
-    </style>
+    /* ✅ 關鍵字搜尋面板 - 水平布局 */
+    #panel-keyword { display: none; gap: 10px; flex-wrap: wrap; align-items: center; }
+    #panel-keyword.active { display: flex; }
+    #panel-keyword input { flex: 2; min-width: 200px; padding: 10px; font-size: 16px; border: 1px solid #ccc; border-radius: 4px; }
+    #panel-keyword select { flex: 1; min-width: 150px; padding: 10px; font-size: 16px; border: 1px solid #ccc; border-radius: 4px; background: white; cursor: pointer; }
+    #panel-keyword button { padding: 10px 30px; font-size: 16px; background: #27ae60; color: white; border: none; border-radius: 4px; cursor: pointer; transition: background 0.3s; }
+    #panel-keyword button:hover { background: #219a52; }
+    
+    /* ✅ 反向搜尋面板 - 垂直布局 */
+    #panel-reverse { display: none; flex-direction: column; }
+    #panel-reverse.active { display: flex; }
+    #panel-reverse textarea { width: 100%; padding: 10px; font-size: 16px; border: 1px solid #ccc; border-radius: 4px; margin-bottom: 10px; box-sizing: border-box; font-family: inherit; resize: vertical; min-height: 80px; }
+    #panel-reverse input { width: 100%; padding: 10px; font-size: 16px; border: 1px solid #ccc; border-radius: 4px; margin-bottom: 10px; box-sizing: border-box; }
+    #panel-reverse button { width: 100%; padding: 10px; font-size: 16px; background: #e67e22; color: white; border: none; border-radius: 4px; cursor: pointer; transition: background 0.3s; }
+    #panel-reverse button:hover { background: #d35400; }
+    
+    /* ✅ 原文編號搜尋面板 - 水平布局 */
+    #panel-strong { display: none; gap: 10px; flex-wrap: wrap; align-items: center; }
+    #panel-strong.active { display: flex; }
+    #panel-strong input { flex: 2; min-width: 200px; padding: 10px; font-size: 16px; border: 1px solid #ccc; border-radius: 4px; }
+    #panel-strong select { flex: 1; min-width: 150px; padding: 10px; font-size: 16px; border: 1px solid #ccc; border-radius: 4px; background: white; cursor: pointer; }
+    #panel-strong button { padding: 10px 30px; font-size: 16px; background: #d35400; color: white; border: none; border-radius: 4px; cursor: pointer; transition: background 0.3s; }
+    #panel-strong button:hover { background: #b33921; }
+
+    .status { padding: 10px; margin: 10px 0; border-radius: 4px; background: #ecf0f1; color: #2c3e50; transition: all 0.3s; }
+    #results-area { max-width: 1200px; margin: 20px auto; padding: 0 20px; display: none; }
+    .testament-header { padding: 12px 20px; border-radius: 8px; margin: 20px 0 10px 0; color: white; font-weight: bold; display: flex; justify-content: space-between; align-items: center; }
+    .count-badge { background: rgba(255,255,255,0.3); padding: 4px 12px; border-radius: 20px; font-size: 14px; }
+    .no-result { color: #999; text-align: center; padding: 20px; }
+    #reverse-results { margin-top: 20px; text-align: left; }
+
+    /* ✅ 編號查詢結果區域樣式 */
+    #strong-results-area { max-width: 1200px; margin: 20px auto; padding: 0 20px; display: none; text-align: left; }
+    .dict-card { background: #fff; padding: 20px; border-radius: 8px; border: 1px solid #e0e0e0; border-left: 6px solid #d35400; margin-bottom: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+    .example-box { background: #fff; padding: 20px; border-radius: 8px; border: 1px solid #e0e0e0; max-height: 600px; overflow-y: auto; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+    .example-item { margin-bottom: 15px; border-bottom: 1px dashed #eee; padding-bottom: 10px; line-height: 1.8; }
+    .example-title { color: #2980b9; font-weight: bold; margin-right: 10px; font-family: monospace; }
+    .strong-code-badge { 
+      display: inline-block; 
+      background: #e74c3c; 
+      color: white; 
+      padding: 1px 6px; 
+      border-radius: 3px; 
+      font-weight: bold; 
+      font-size: 0.85em;
+      margin: 0 2px;
+      font-family: monospace;
+    }
+    .verse-text { margin-top: 4px; padding: 8px; background: #f8f9fa; border-radius: 4px; }
+  </style>
 </head>
 <body>
-    <div class="search-container">
-        <h1>🔍 聖經原文多功能查詢系統</h1>
+  <div class="search-container">
+    <h1>🔍 聖經原文多功能查詢系統</h1>
+    <div class="tabs">
+      <button class="tab-btn active" id="tab-keyword" onclick="switchMode('keyword')">關鍵字搜尋</button>
+      <button class="tab-btn" id="tab-reverse" onclick="switchMode('reverse')">原文反查模式</button>
+      <button class="tab-btn" id="tab-strong" onclick="switchMode('strong')">原文編號查詢</button>
+    </div>
+
+    <!-- ========================================== -->
+    <!-- ✅ 關鍵字搜尋面板 -->
+    <!-- ========================================== -->
+    <div id="panel-keyword" class="search-panel active">
+      <input type="text" id="keyword" placeholder="請輸入中文關鍵字（支援簡繁自動轉換，如：光、忍耐）" onkeyup="if(event.key==='Enter') runSearch()">
+      <select id="book-filter">
+        <option value="all">🔍 所有書卷（全部）</option>
+      </select>
+      <button onclick="runSearch()">搜尋</button>
+    </div>
+
+    <!-- ========================================== -->
+    <!-- ✅ 原文反查模式面板 -->
+    <!-- ========================================== -->
+    <div id="panel-reverse" class="search-panel">
+      <textarea id="reverse-text" placeholder="請貼上聖經內文（例如：神愛世人，甚至將祂的獨生子...）" rows="3"></textarea>
+      <input type="text" id="reverse-target" placeholder="想要反查的特定字眼（例如：愛）">
+      <button onclick="runReverseSearch()">精準反查原文</button>
+      <div id="reverse-results"></div>
+    </div>
+
+    <!-- ========================================== -->
+    <!-- ✨ 原文編號模式面板 -->
+    <!-- ========================================== -->
+    <div id="panel-strong" class="search-panel">
+      <input type="text" id="strong-code" placeholder="請輸入 Strong 編號（例如：G2532 或 H7225）" onkeyup="if(event.key==='Enter') runStrongSearch()">
+      <select id="strong-book-filter">
+        <option value="all">🔍 所有書卷（全部）</option>
+      </select>
+      <button onclick="runStrongSearch()">搜尋</button>
+    </div>
+
+    <div id="status" class="status">正在載入聖經資料庫...</div>
+  </div>
+
+  <!-- ========================================== -->
+  <!-- 關鍵字搜尋的結果顯示區域 -->
+  <!-- ========================================== -->
+  <div id="results-area">
+    <div class="testament-header" style="background:#8e44ad;">
+      📖 舊約部分 <span id="ot-count" class="count-badge">0</span>
+    </div>
+    <div id="ot-results"><p class="no-result">無結果</p></div>
+    <div class="testament-header" style="background:#2980b9;">
+      📖 新約部分 <span id="nt-count" class="count-badge">0</span>
+    </div>
+    <div id="nt-results"><p class="no-result">無結果</p></div>
+  </div>
+
+  <!-- ========================================== -->
+  <!-- ✨ 原文編號查詢的結果顯示區域 -->
+  <!-- ========================================== -->
+  <div id="strong-results-area">
+    <div class="dict-card">
+      <h3 style="margin-top: 0; color: #d35400;" id="strong-title">💡 原文編號資訊</h3>
+      <div id="strong-dict-content" style="white-space: pre-wrap; font-size: 16px; line-height: 1.7;"></div>
+    </div>
+    <div class="example-box">
+      <h3 style="margin-top: 0; color: #2c3e50;">📚 聖經精彩例句 <span id="strong-eg-count" style="font-size:14px; color:#7f8c8d; font-weight:normal;"></span></h3>
+      <div id="strong-examples-content"></div>
+    </div>
+  </div>
+
+  <!-- ============================================ -->
+  <!-- JavaScript 引用 -->
+  <!-- ============================================ -->
+  <script src="https://cdn.jsdelivr.net/npm/s2t-t2s@1.0.3/dist/s2t-t2s.min.js"></script>
+  <script src="index.js"></script>
+  <script src="src/config.js"></script>
+  <script src="src/web.js"></script>
+  <script src="src/main.js"></script>
+  <script>
+    // ✨ 模式切換函數
+    function switchMode(mode) {
+      document.querySelectorAll('.search-panel').forEach(p => p.classList.remove('active'));
+      document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+      
+      document.getElementById(`panel-${mode}`).classList.add('active');
+      document.getElementById(`tab-${mode}`).classList.add('active');
+      
+      if (mode === 'keyword') {
+        document.getElementById('results-area').style.display = 'block';
+        document.getElementById('strong-results-area').style.display = 'none';
+      } else if (mode === 'strong') {
+        document.getElementById('results-area').style.display = 'none';
+        document.getElementById('strong-results-area').style.display = 'block';
+      } else {
+        document.getElementById('results-area').style.display = 'none';
+        document.getElementById('strong-results-area').style.display = 'none';
+      }
+    }
+
+    // ✨ 原文編號查詢核心函數
+    function runStrongSearch() {
+      const inputEl = document.getElementById('strong-code');
+      const bookFilterEl = document.getElementById('strong-book-filter');
+      const resultsArea = document.getElementById('strong-results-area');
+      const titleEl = document.getElementById('strong-title');
+      const dictEl = document.getElementById('strong-dict-content');
+      const egCountEl = document.getElementById('strong-eg-count');
+      const egContentEl = document.getElementById('strong-examples-content');
+      
+      let code = inputEl.value.trim().toUpperCase();
+      if (!code) {
+        alert("請輸入有效的原文編號（例如：G2532 或 H7225）");
+        return;
+      }
+
+      if (typeof strongsDict === 'undefined') {
+        alert("資料典籍尚未載入完成，請稍候再試。");
+        return;
+      }
+
+      let entry = strongsDict[code] || strongsDict[code.substring(1)];
+      if (!entry) {
+        alert(`在原文辭典中找不到編號為 [ ${code} ] 的資訊。`);
+        return;
+      }
+
+      resultsArea.style.display = 'block';
+
+      let wordName = entry.lemma || entry.word || "";
+      titleEl.innerText = `💡 原文編號：${code} ${wordName}`;
+      
+      let definitionText = typeof entry === 'string' ? entry : (entry.Desc || entry.definition || JSON.stringify(entry));
+      dictEl.innerText = definitionText;
+
+      egContentEl.innerHTML = '<p style="color:#7f8c8d;">🔍 正在全庫檢索例句...</p>';
+      let matches = [];
+      let currentBible = (typeof bibleData !== 'undefined') ? bibleData : [];
+      
+      const selectedBook = bookFilterEl ? bookFilterEl.value : 'all';
+      const searchPattern = `{${code}}`;
+      
+      let totalFound = 0;
+
+      for (let i = 0; i < currentBible.length; i++) {
+        let verse = currentBible[i];
         
-        <div class="tabs">
-            <button class="tab-btn active" onclick="switchMode('keyword')">關鍵字搜尋</button>
-            <button class="tab-btn" onclick="switchMode('reverse')">原文反查模式</button>
-        </div>
-
-        <!-- ========================================== -->
-        <!-- ✅ 關鍵字搜尋面板                          -->
-        <!-- ========================================== -->
-        <div id="panel-keyword" class="search-panel active">
-            <input type="text" id="keyword" placeholder="請輸入中文關鍵字（支援簡繁自動轉換，如：光、忍耐）" onkeyup="if(event.key==='Enter') runSearch()">
-            <select id="book-filter">
-                <option value="all">🔍 所有書卷（全部）</option>
-            </select>
-            <button onclick="runSearch()">搜尋</button>
-        </div>
-
-        <!-- ========================================== -->
-        <!-- ✅ 原文反查模式面板                        -->
-        <!-- ========================================== -->
-        <div id="panel-reverse" class="search-panel">
-            <textarea id="reverse-text" placeholder="請貼上聖經內文（例如：神愛世人，甚至將祂的獨生子...）" rows="3"></textarea>
-            <input type="text" id="reverse-target" placeholder="想要反查的特定字眼（例如：愛）">
-            <button onclick="runReverseSearch()">精準反查原文</button>
-            <div id="reverse-results"></div>
-        </div>
-
-        <div id="status" class="status">正在載入聖經資料庫...</div>
-    </div>
-
-    <!-- ========================================== -->
-    <!-- 關鍵字搜尋的結果顯示區域                    -->
-    <!-- ========================================== -->
-    <div id="results-area" style="display: none;">
-        <div class="testament-header" style="background:#8e44ad;">
-            📖 舊約部分 
-            <span id="ot-count" class="count-badge">0</span>
-        </div>
-        <div id="ot-results"><p class="no-result">無結果</p></div>
-
-        <div class="testament-header" style="background:#2980b9;">
-            📖 新約部分 
-            <span id="nt-count" class="count-badge">0</span>
-        </div>
-        <div id="nt-results"><p class="no-result">無結果</p></div>
-    </div>
-
-    <!-- ============================================ -->
-    <!-- JavaScript 引用                              -->
-    <!-- ============================================ -->
-    
-    <script src="https://cdn.jsdelivr.net/npm/s2t-t2s@1.0.3/dist/s2t-t2s.min.js"></script>
-    <script src="index.js"></script>
-    <script src="src/config.js"></script>
-    <script src="src/web.js"></script>
-    <script src="src/main.js"></script>
-
-    <script>
-        (function() {
-            console.log('🚀 聖經原文多功能查詢系統啟動中...');
-            console.log('📁 數據路徑: data/');
-            console.log('📁 源碼路徑: src/');
-            
-            const checks = [
-                { name: 'runSearch', required: true },
-                { name: 'runReverseSearch', required: true },
-                { name: 'switchMode', required: true },
-                { name: 'populateBookFilter', required: true }
-            ];
-            
-            let allLoaded = true;
-            console.log('📋 检查函数加载状态:');
-            checks.forEach(({ name, required }) => {
-                const loaded = typeof window[name] === 'function';
-                console.log(`  ${loaded ? '✅' : '❌'} ${name}`);
-                if (required && !loaded) allLoaded = false;
+        if (verse.text && verse.text.includes(searchPattern)) {
+          let bookName = verse.book;
+          if (typeof verse.book === 'number' && typeof BOOK_NAMES !== 'undefined') {
+            bookName = BOOK_NAMES[verse.book] || `書卷 ${verse.book}`;
+          }
+          
+          if (selectedBook === 'all' || bookName === selectedBook || verse.book === selectedBook) {
+            matches.push({
+              ...verse,
+              bookName: bookName
             });
-            
-            if (allLoaded) {
-                console.log('✅ 所有核心函数已加载完成');
-                console.log('💡 可用命令:');
-                console.log('  runSearch()         - 关键词搜索');
-                console.log('  runReverseSearch()  - 反向搜索');
-                console.log('  switchMode("keyword") - 切换到关键词模式');
-                console.log('  switchMode("reverse")  - 切换到反向模式');
+            totalFound++;
+          }
+        }
+        if (matches.length >= 100) break;
+      }
+
+      egCountEl.innerText = `(共找到 ${totalFound} 節，顯示前 ${matches.length} 條)`;
+      
+      if (matches.length === 0) {
+        egContentEl.innerHTML = `
+          <div class="no-result">
+            <p>⚠️ 在此書卷或範圍內，未發現內嵌編號 "${code}" 的經文例句。</p>
+            <p style="color:#7f8c8d; font-size:14px; margin-top:10px;">
+              💡 提示：請確認聖經資料中的 Strong 編號格式為 {G2532}
+            </p>
+          </div>
+        `;
+      } else {
+        let htmlRows = matches.map((v, index) => {
+          let displayText = v.text;
+          displayText = displayText.replace(/\{[GH]\d{1,4}\}/gi, function(match) {
+            if (match.toUpperCase() === `{${code}}`) {
+              return `<span class="strong-code-badge">${match}</span>`;
             }
-        })();
-    </script>
+            return match;
+          });
+          
+          return `<div class="example-item">
+                    <span class="example-title">#${index + 1} [${v.bookName || v.book} ${v.chapter}:${v.verse}]</span>
+                    <div class="verse-text">${displayText}</div>
+                  </div>`;
+        }).join('');
+        egContentEl.innerHTML = htmlRows;
+      }
+    }
+
+    // ================================================================
+    // 💡 複製書卷下拉選單（保留 optgroup）
+    // ================================================================
+    function syncBookFilters() {
+      const originalSelect = document.getElementById('book-filter');
+      const targetSelect = document.getElementById('strong-book-filter');
+      
+      if (!originalSelect || !targetSelect) return;
+      if (originalSelect.options.length <= 1) return;
+      
+      // 比較內部的 HTML 結構是否相同
+      if (targetSelect.innerHTML !== originalSelect.innerHTML) {
+        targetSelect.innerHTML = originalSelect.innerHTML;
+        console.log('✅ 書卷下拉選單已同步（含分組）');
+      }
+    }
+
+    // 監聽 book-filter 的變化
+    const observer = new MutationObserver(function() {
+      syncBookFilters();
+    });
+
+    const bookFilter = document.getElementById('book-filter');
+    if (bookFilter) {
+      observer.observe(bookFilter, { 
+        childList: true, 
+        subtree: true
+      });
+    }
+
+    // 頁面載入後多次嘗試
+    window.addEventListener('load', function() {
+      const attempts = [100, 300, 500, 800, 1200, 2000, 3000];
+      attempts.forEach(delay => {
+        setTimeout(syncBookFilters, delay);
+      });
+    });
+
+    // 暴露函數
+    window.syncBookFilters = syncBookFilters;
+    window.runStrongSearch = runStrongSearch;
+
+    console.log('🔍 聖經原文多功能查詢系統已啟動');
+  </script>
 </body>
 </html>
